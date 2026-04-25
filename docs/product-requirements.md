@@ -1,0 +1,544 @@
+# DroidDock 产品需求文档
+
+调研日期：2026-04-25
+
+## 1. 产品定位
+
+DroidDock 是一个面向 macOS Apple Silicon 的 Android 手机投屏与控制桌面应用。应用基于 `adb` 和 `scrcpy` 实现设备连接、投屏启动、远程控制和多设备会话管理。
+
+第一版接受 `scrcpy` 独立窗口投屏，DroidDock 作为连接和会话控制台存在，不做内嵌投屏画面。
+
+## 2. 目标用户
+
+主要用户是非技术用户。
+
+这意味着产品不能要求用户理解 `adb`、`scrcpy`、serial、端口、pair/connect 差异等命令行概念。所有关键流程都应由界面引导完成，错误信息需要转化成可执行的下一步操作。
+
+## 3. 平台范围
+
+仅支持 macOS Apple Silicon。
+
+- 支持芯片：M1 / M2 / M3 / M4 及后续 Apple Silicon。
+- 不支持 Intel Mac。
+- 分发形式：`.dmg` 安装包。
+- 第一版不考虑 Windows、Linux、移动端。
+
+## 4. 技术路线
+
+推荐技术栈：
+
+- Tauri
+- Vue 3
+- TypeScript
+- Rust 后端命令层
+
+推荐理由：
+
+- 应用体积和资源占用低于 Electron。
+- Rust 适合处理本机进程、下载、校验、解压、路径和文件权限。
+- Vue 适合快速构建流程化用户界面。
+- 需求已接受 `scrcpy` 独立窗口，不需要 Electron 的完整 Chromium 运行时能力。
+
+架构分层：
+
+```text
+Vue UI
+  |
+  | invoke()
+  v
+Tauri / Rust Commands
+  |
+  ├─ ToolManager
+  ├─ DeviceManager
+  ├─ PairingManager
+  ├─ SessionManager
+  └─ ConfigStore
+```
+
+## 5. 核心目标
+
+第一版需要完成以下目标：
+
+1. 用户无需打开终端即可完成工具安装、设备连接和投屏。
+2. 支持 USB 连接。
+3. 支持 USB 转无线连接。
+4. 支持 Android 11+ 的 `adb pair` 无线配对。
+5. 支持多台手机同时投屏。
+6. 支持自动安装 `adb` 和 `scrcpy`。
+7. 支持用户手动配置 `adb` 和 `scrcpy` 路径。
+8. 支持打包成可分发的 `.dmg`。
+
+## 6. 非目标
+
+第一版不做以下能力：
+
+- 不嵌入 scrcpy 投屏画面。
+- 不做录屏功能。
+- 不支持 Intel Mac。
+- 不支持 Windows / Linux。
+- 不做 App Store 发布。
+- 不做复杂文件管理器。
+- 不做完整 logcat 查看器。
+- 不修改用户 shell PATH。
+- 不要求 Homebrew。
+- 不要求 sudo。
+
+## 7. 用户流程
+
+### 7.1 首次启动
+
+用户打开 App 后进入初始化流程。
+
+App 需要执行：
+
+1. 检测 `adb`。
+2. 检测 `scrcpy`。
+3. 如果工具不存在，引导用户自动安装或手动选择路径。
+4. 检测通过后进入设备管理页。
+
+界面需要展示：
+
+- 当前 `adb` 状态。
+- 当前 `scrcpy` 状态。
+- 工具版本。
+- 工具路径。
+- 自动安装入口。
+- 手动选择路径入口。
+
+### 7.2 USB 连接流程
+
+用户通过 USB 连接手机后，App 自动刷新设备列表。
+
+App 需要展示设备状态：
+
+- `device`：可用。
+- `unauthorized`：待手机确认 USB 调试授权。
+- `offline`：设备离线。
+- 未发现设备：提示检查数据线、USB 调试和授权弹窗。
+
+用户选择一个可用设备后，可以启动投屏。
+
+启动投屏时，App 需要执行：
+
+```bash
+scrcpy -s <serial> <options>
+```
+
+### 7.3 USB 转无线连接流程
+
+适用于 Android 10 及以下，或用户希望先通过 USB 建立无线连接的场景。
+
+流程：
+
+1. 用户插入 USB。
+2. App 确认设备处于 `device` 状态。
+3. 用户点击“切换为无线连接”。
+4. App 执行：
+
+```bash
+adb -s <serial> tcpip 5555
+```
+
+5. 用户输入手机 IP，或 App 尝试读取设备 IP。
+6. App 执行：
+
+```bash
+adb connect <ip>:5555
+```
+
+7. 连接成功后，设备列表出现 `<ip>:5555 device`。
+8. 用户可拔掉 USB 并继续投屏。
+
+### 7.4 ADB Pair 无线配对流程
+
+适用于 Android 11+ 无线调试。
+
+界面必须明确区分两个端口：
+
+- 配对端口：用于 `adb pair`。
+- 连接端口：用于 `adb connect`。
+
+用户输入：
+
+- 配对 IP。
+- 配对端口。
+- 6 位配对码。
+- 连接 IP。
+- 连接端口。
+
+App 执行：
+
+```bash
+adb pair <ip>:<pair_port>
+```
+
+随后向进程 stdin 输入配对码。
+
+配对成功后执行：
+
+```bash
+adb connect <ip>:<connect_port>
+```
+
+注意事项：
+
+- 配对码不能持久化保存。
+- pair 端口通常会过期。
+- connect 端口和 pair 端口通常不同。
+- 配对成功不代表已经连接成功，必须继续执行 connect。
+
+### 7.5 多设备投屏流程
+
+用户可以同时启动多个投屏会话。
+
+设计要求：
+
+- 每台设备一个会话。
+- 每个会话对应一个独立 `scrcpy` 进程。
+- 每个会话对应一个独立 scrcpy 投屏窗口。
+- App 主界面展示所有会话状态。
+- 每个会话可独立启动、停止、重连。
+
+不要求第一版支持同一设备重复启动多个投屏会话。
+
+## 8. 功能需求
+
+### 8.1 工具管理
+
+App 需要支持两种工具配置方式。
+
+自动安装：
+
+- 下载官方 Android SDK Platform Tools。
+- 下载官方 scrcpy macOS Apple Silicon 版本。
+- 解压到 App 管理目录。
+- 校验文件完整性。
+- App 内部使用工具路径。
+- 不修改用户全局 PATH。
+
+建议目录：
+
+```text
+~/Library/Application Support/DroidDock/tools/
+```
+
+手动配置：
+
+- 用户选择 `adb` 可执行文件。
+- 用户选择 `scrcpy` 可执行文件。
+- App 保存路径。
+- 启动前验证路径是否存在、是否可执行、版本是否符合要求。
+
+工具检测内容：
+
+- `adb version`
+- `scrcpy --version`
+- 可执行权限。
+- 目标架构是否适合 Apple Silicon。
+
+### 8.2 设备发现
+
+App 需要通过以下命令获取设备：
+
+```bash
+adb devices -l
+```
+
+设备列表字段：
+
+- serial。
+- 状态。
+- model。
+- product。
+- transport id。
+- 连接方式。
+- 用户别名。
+
+连接方式推断：
+
+- serial 包含 `host:port`：无线连接。
+- serial 不包含 `host:port`：通常是 USB。
+- 来自 pair 流程的设备可标记为 Pair/Wireless。
+
+### 8.3 投屏会话
+
+每个会话需要保存：
+
+- session id。
+- device serial。
+- device alias。
+- scrcpy pid。
+- 启动时间。
+- 连接方式。
+- 当前参数。
+- 状态：idle / starting / running / stopped / failed。
+- stdout / stderr 日志。
+
+启动命令格式：
+
+```bash
+scrcpy -s <serial> <options>
+```
+
+停止会话：
+
+- 停止对应 `scrcpy` 子进程。
+- 更新会话状态。
+- 保留最近一次日志。
+
+App 退出时：
+
+- 默认询问是否关闭全部 scrcpy 会话。
+- 如果用户选择关闭，则终止所有由 App 启动的 scrcpy 进程。
+
+### 8.4 投屏参数
+
+第一版支持以下参数：
+
+| 参数 | scrcpy 参数 | 说明 |
+| --- | --- | --- |
+| 最大分辨率 | `--max-size` | 降低分辨率可改善无线卡顿 |
+| 最大帧率 | `--max-fps` | 常用 30 / 45 / 60 |
+| 视频码率 | `--video-bit-rate` | 常用 2M / 4M / 8M / 16M |
+| 视频编码 | `--video-codec` | default / h264 / h265 |
+| 禁用音频 | `--no-audio` | 默认建议开启 |
+| 只看不控 | `--no-control` | 演示和监看场景 |
+| 保持亮屏 | `--stay-awake` | 开发调试场景 |
+| 息屏投屏 | `--turn-screen-off` | 省电和隐私场景 |
+| 显示触摸 | `--show-touches` | 演示场景 |
+| 置顶窗口 | `--always-on-top` | 多窗口场景 |
+| 全屏 | `--fullscreen` | 演示场景 |
+
+第一版不支持录屏参数。
+
+### 8.5 预设
+
+内置预设：
+
+日常使用：
+
+```bash
+--max-size=1920 --max-fps=60 --no-audio --stay-awake
+```
+
+低带宽无线：
+
+```bash
+--max-size=1024 --video-bit-rate=2M --max-fps=30 --no-audio
+```
+
+演示模式：
+
+```bash
+--max-size=1920 --max-fps=60 --show-touches --always-on-top
+```
+
+息屏省电：
+
+```bash
+--max-size=1920 --max-fps=60 --no-audio --stay-awake --turn-screen-off
+```
+
+只看不控：
+
+```bash
+--max-size=1920 --max-fps=60 --no-control
+```
+
+### 8.6 日志和错误处理
+
+App 需要记录：
+
+- 执行的命令。
+- 命令参数。
+- stdout。
+- stderr。
+- 进程退出码。
+- 失败时间。
+
+常见错误需要转译：
+
+| 原始状态或错误 | 用户提示 |
+| --- | --- |
+| `unauthorized` | 请解锁手机，并在手机弹窗中允许 USB 调试 |
+| `offline` | 设备已离线，请重新插拔或重连无线调试 |
+| `more than one device/emulator` | 当前有多台设备，请先选择一台设备 |
+| `Connection refused` | 无线调试端口不可用，请检查 IP、端口和手机无线调试状态 |
+| `failed to authenticate` | 配对失败，请重新生成配对码 |
+| `device not found` | 设备不存在或已断开，请刷新设备列表 |
+| `adb: unknown command pair` | 当前 adb 不支持 pair，请升级 Platform Tools |
+
+### 8.7 配置持久化
+
+需要保存：
+
+- `adb` 路径。
+- `scrcpy` 路径。
+- 自动安装工具目录。
+- 最近连接的无线 endpoint。
+- 设备别名。
+- 最近使用的投屏参数。
+- 用户选择的默认预设。
+
+不能保存：
+
+- adb pair 配对码。
+- 设备隐私数据。
+- 手机截图或投屏内容。
+
+## 9. 界面需求
+
+### 9.1 主界面
+
+主界面包含：
+
+- 工具状态区。
+- 设备列表。
+- 连接方式入口。
+- 投屏参数区。
+- 会话列表。
+- 日志面板。
+
+主界面应优先展示当前能做什么，而不是展示底层命令。
+
+### 9.2 新手引导
+
+面向非技术用户，需要提供分步引导：
+
+1. 安装或配置工具。
+2. 开启手机开发者选项。
+3. 开启 USB 调试。
+4. USB 连接并授权。
+5. 选择投屏设备。
+6. 启动投屏。
+
+ADB Pair 引导：
+
+1. 打开手机设置。
+2. 进入开发者选项。
+3. 开启无线调试。
+4. 选择“使用配对码配对设备”。
+5. 填入配对 IP、端口和配对码。
+6. 填入连接 IP 和连接端口。
+7. 点击连接。
+
+### 9.3 多会话列表
+
+每个会话卡片展示：
+
+- 设备名。
+- 连接方式。
+- 当前状态。
+- 启动时间。
+- 停止按钮。
+- 重连按钮。
+- 查看日志按钮。
+
+## 10. 安全和隐私
+
+要求：
+
+- 不上传任何设备信息。
+- 不上传日志。
+- 不保存配对码。
+- 不自动开启远程访问。
+- 自动安装工具时必须展示下载来源。
+- 下载文件需要校验完整性。
+- App 内部管理的工具目录需要可查看。
+
+需要说明：
+
+- `adb` 授权会允许电脑控制手机。
+- 用户需要在手机上明确授权。
+- 无线调试应只在可信网络使用。
+
+## 11. 打包和分发
+
+第一版需要输出 `.dmg`。
+
+要求：
+
+- 仅构建 Apple Silicon 版本。
+- DMG 内包含 DroidDock App。
+- 支持拖拽安装到 Applications。
+- App 名称：DroidDock。
+- Bundle identifier 待定。
+- 后续正式分发需要签名和 notarization。
+
+Tauri 构建目标：
+
+```text
+aarch64-apple-darwin
+```
+
+## 12. 验收标准
+
+MVP 验收项：
+
+1. 全新 Apple Silicon Mac 可安装并启动 App。
+2. App 能检测 `adb` 和 `scrcpy`。
+3. App 能自动安装 `adb` 和 `scrcpy`。
+4. 用户可手动配置 `adb` 和 `scrcpy` 路径。
+5. USB 连接手机后，App 能显示设备。
+6. `unauthorized` 设备有明确处理提示。
+7. 可通过 USB 启动 scrcpy 投屏。
+8. 可通过 USB 转无线连接并投屏。
+9. 可通过 `adb pair` 配对 Android 11+ 设备。
+10. 可同时启动至少两台手机的投屏窗口。
+11. 每个投屏会话可独立停止。
+12. App 重启后保留工具路径、设备别名和最近无线连接。
+13. 可构建 `.dmg` 安装包。
+
+## 13. 开发阶段拆分
+
+### 阶段一：需求和原型
+
+- 完成 PRD。
+- 完成主界面线框。
+- 确认 Tauri + Vue 工程结构。
+- 明确工具下载源和版本策略。
+
+### 阶段二：基础工程
+
+- 初始化 Tauri + Vue + TypeScript。
+- 建立 Rust command 层。
+- 建立配置存储。
+- 完成工具检测。
+
+### 阶段三：设备连接
+
+- 实现 USB 设备发现。
+- 实现 USB 授权状态提示。
+- 实现 USB 转无线连接。
+- 实现 ADB Pair。
+
+### 阶段四：投屏会话
+
+- 实现 scrcpy 参数生成。
+- 实现单设备投屏。
+- 实现多设备会话管理。
+- 实现会话日志。
+
+### 阶段五：工具安装
+
+- 实现 adb 自动下载、校验、解压。
+- 实现 scrcpy 自动下载、校验、解压。
+- 实现用户手动路径配置。
+
+### 阶段六：打包分发
+
+- 配置 Tauri bundle。
+- 构建 Apple Silicon `.dmg`。
+- 验证新机器安装流程。
+- 准备签名和公证配置。
+
+## 14. 待确认项
+
+- Bundle identifier。
+- App 图标。
+- 自动安装时固定工具版本还是默认最新稳定版。
+- scrcpy 下载源是否只允许 GitHub official release。
+- adb 下载源是否只允许 Android 官方 Platform Tools。
+- 是否需要应用内更新。
+- 是否需要导出诊断日志。
+
