@@ -3,5 +3,9 @@
   "identifier": "default",
   "description": "Main window permissions for DroidDock",
   "windows": ["main"],
-  "permissions": ["core:default", "dialog:default"]
+  "permissions": [
+    "core:default",
+    "dialog:default",
+    "core:window:allow-destroy"
+  ]
 }
