@@ -21,6 +21,7 @@ struct AppState {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 struct AppConfig {
     adb_path: Option<String>,
     scrcpy_path: Option<String>,
