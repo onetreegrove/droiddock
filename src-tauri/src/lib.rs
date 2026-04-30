@@ -20,12 +20,29 @@ struct AppState {
     sessions: Mutex<HashMap<String, SessionEntry>>,
 }
 
-#[derive(Debug, Default, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct AppConfig {
     adb_path: Option<String>,
     scrcpy_path: Option<String>,
     device_aliases: HashMap<String, String>,
     recent_endpoints: Vec<String>,
+    default_scrcpy_options: ScrcpyOptions,
+    default_preset_id: String,
+    device_scrcpy_options: HashMap<String, DeviceOptionEntry>,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            adb_path: None,
+            scrcpy_path: None,
+            device_aliases: HashMap::new(),
+            recent_endpoints: Vec::new(),
+            default_scrcpy_options: ScrcpyOptions::default(),
+            default_preset_id: "daily".to_string(),
+            device_scrcpy_options: HashMap::new(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize)]
@@ -58,7 +75,7 @@ struct Device {
     raw: String,
 }
 
-#[derive(Debug, Default, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ScrcpyOptions {
     max_size: Option<u32>,
@@ -72,6 +89,32 @@ struct ScrcpyOptions {
     show_touches: Option<bool>,
     always_on_top: Option<bool>,
     fullscreen: Option<bool>,
+}
+
+impl Default for ScrcpyOptions {
+    fn default() -> Self {
+        Self {
+            max_size: Some(1920),
+            max_fps: Some(60),
+            video_bit_rate: None,
+            video_codec: Some("default".to_string()),
+            no_audio: Some(true),
+            no_control: None,
+            stay_awake: Some(true),
+            turn_screen_off: None,
+            show_touches: None,
+            always_on_top: None,
+            fullscreen: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct DeviceOptionEntry {
+    preset_id: Option<String>,
+    options: ScrcpyOptions,
+    updated_at: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -484,6 +527,65 @@ fn save_device_alias(
 }
 
 #[tauri::command]
+fn save_default_scrcpy_options(
+    state: State<'_, AppState>,
+    options: ScrcpyOptions,
+    preset_id: String,
+) -> Result<AppConfig, String> {
+    let mut config = state
+        .config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_string())?;
+
+    config.default_scrcpy_options = options;
+    config.default_preset_id = preset_id;
+    save_config(&config)?;
+
+    Ok(config.clone())
+}
+
+#[tauri::command]
+fn save_device_scrcpy_options(
+    state: State<'_, AppState>,
+    serial: String,
+    options: ScrcpyOptions,
+    preset_id: Option<String>,
+) -> Result<AppConfig, String> {
+    let mut config = state
+        .config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_string())?;
+
+    config.device_scrcpy_options.insert(
+        serial,
+        DeviceOptionEntry {
+            preset_id,
+            options,
+            updated_at: now_secs(),
+        },
+    );
+    save_config(&config)?;
+
+    Ok(config.clone())
+}
+
+#[tauri::command]
+fn clear_device_scrcpy_options(
+    state: State<'_, AppState>,
+    serial: String,
+) -> Result<AppConfig, String> {
+    let mut config = state
+        .config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_string())?;
+
+    config.device_scrcpy_options.remove(&serial);
+    save_config(&config)?;
+
+    Ok(config.clone())
+}
+
+#[tauri::command]
 fn get_tool_status(state: State<'_, AppState>) -> Result<ToolStatus, String> {
     let config = state
         .config
@@ -807,6 +909,9 @@ pub fn run() {
             get_app_config,
             set_tool_paths,
             save_device_alias,
+            save_default_scrcpy_options,
+            save_device_scrcpy_options,
+            clear_device_scrcpy_options,
             get_tool_status,
             list_devices,
             adb_tcpip,
