@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildScrcpyArgs,
   buildScrcpyCommand,
+  optionSummaryTagsFromArgs,
   clearUndefinedOptions,
   defaultScrcpyOptions,
   mergeScrcpyOptions,
@@ -76,5 +77,18 @@ describe('scrcpy option domain', () => {
       '2M',
       'no-audio',
     ]);
+  });
+
+  it('summarizes the actual session args instead of recomputing current defaults', () => {
+    expect(
+      optionSummaryTagsFromArgs([
+        '-s',
+        'R9YT301WXXX',
+        '--max-size=1024',
+        '--max-fps=30',
+        '--video-bit-rate=2M',
+        '--no-control',
+      ]),
+    ).toEqual(['1024p', '30fps', '2M', 'no-control']);
   });
 });

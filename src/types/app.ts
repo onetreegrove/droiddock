@@ -7,8 +7,16 @@ export type ToolStatus = {
   scrcpy_path: string | null;
   adb_version: string | null;
   scrcpy_version: string | null;
+  adb_arch: string | null;
+  scrcpy_arch: string | null;
   adb_ok: boolean;
   scrcpy_ok: boolean;
+};
+
+export type ToolInstallResult = {
+  adb_path: string;
+  scrcpy_path: string;
+  logs: string[];
 };
 
 export type Device = {
@@ -75,5 +83,6 @@ export type PairRequest = {
   host: string;
   pair_port: number;
   pairing_code: string;
+  connect_host: string | null;
   connect_port: number | null;
 };

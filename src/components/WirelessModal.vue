@@ -20,12 +20,25 @@ async function submit() {
   <div class="modal-overlay" @click.self="store.modal = null">
     <section class="modal-card">
       <header class="modal-header">
-        <div><div class="modal-title">USB 转无线连接</div><div class="modal-subtitle">通过 USB 建立无线调试连接</div></div>
-        <button class="btn btn-ghost" @click="store.modal = null">关闭</button>
+        <div><div class="modal-title">USB 转无线连接</div><div class="modal-subtitle">适用于 Android 10 及以下，或通过 USB 建立无线</div></div>
+        <button class="modal-close" aria-label="关闭" @click="store.modal = null">
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M2 2l8 8M10 2L2 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+          </svg>
+        </button>
       </header>
       <div class="modal-body">
-        <label>USB 设备<select v-model="selectedSerial" class="field-select"><option v-for="device in usbDevices" :key="device.serial" :value="device.serial">{{ device.model || device.serial }}</option></select></label>
-        <div class="form-grid">
+        <div class="modal-section-title">选择 USB 连接设备</div>
+        <div class="wireless-device-list">
+          <label v-for="device in usbDevices" :key="device.serial" class="wireless-device-option">
+            <input v-model="selectedSerial" type="radio" :value="device.serial" />
+            <span><strong>{{ device.alias || device.model || '未知设备' }}</strong><span class="mono">{{ device.serial }}</span></span>
+          </label>
+          <div v-if="usbDevices.length === 0" class="modal-note">暂无可用 USB 设备</div>
+        </div>
+        <div class="modal-section-title">输入手机 IP 地址</div>
+        <div class="modal-note">设置 → 关于手机 → 状态 → IP 地址</div>
+        <div class="form-grid form-grid-ip">
           <label>手机 IP<input v-model="host" class="field-input" placeholder="192.168.1.100" /></label>
           <label>端口<input v-model="port" class="field-input" /></label>
         </div>

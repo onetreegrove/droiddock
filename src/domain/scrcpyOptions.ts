@@ -79,3 +79,23 @@ export function optionSummaryTags(options: ScrcpyOptions): string[] {
 
   return tags;
 }
+
+export function optionSummaryTagsFromArgs(args: string[]): string[] {
+  const options: ScrcpyOptions = {};
+
+  for (const arg of args) {
+    if (arg.startsWith('--max-size=')) options.maxSize = Number(arg.slice('--max-size='.length));
+    if (arg.startsWith('--max-fps=')) options.maxFps = Number(arg.slice('--max-fps='.length));
+    if (arg.startsWith('--video-bit-rate=')) options.videoBitRate = arg.slice('--video-bit-rate='.length);
+    if (arg.startsWith('--video-codec=')) options.videoCodec = arg.slice('--video-codec='.length) as ScrcpyOptions['videoCodec'];
+    if (arg === '--no-audio') options.noAudio = true;
+    if (arg === '--no-control') options.noControl = true;
+    if (arg === '--stay-awake') options.stayAwake = true;
+    if (arg === '--turn-screen-off') options.turnScreenOff = true;
+    if (arg === '--show-touches') options.showTouches = true;
+    if (arg === '--always-on-top') options.alwaysOnTop = true;
+    if (arg === '--fullscreen') options.fullscreen = true;
+  }
+
+  return optionSummaryTags(options);
+}

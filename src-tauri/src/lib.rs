@@ -3,6 +3,7 @@ use std::{
     collections::{HashMap, VecDeque},
     fs,
     io::{BufRead, BufReader, Write},
+    os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::{Child, Command, Stdio},
     sync::{Arc, Mutex},
@@ -13,6 +14,9 @@ use tauri::State;
 
 const LOG_LIMIT: usize = 400;
 const DEFAULT_TCPIP_PORT: u16 = 5555;
+const PLATFORM_TOOLS_URL: &str =
+    "https://dl.google.com/android/repository/platform-tools-latest-darwin.zip";
+const SCRCPY_RELEASE_API: &str = "https://api.github.com/repos/Genymobile/scrcpy/releases/latest";
 
 #[derive(Debug, Default)]
 struct AppState {
@@ -52,6 +56,8 @@ struct ToolStatus {
     scrcpy_path: Option<String>,
     adb_version: Option<String>,
     scrcpy_version: Option<String>,
+    adb_arch: Option<String>,
+    scrcpy_arch: Option<String>,
     adb_ok: bool,
     scrcpy_ok: bool,
 }
@@ -63,6 +69,13 @@ struct CommandResult {
     stdout: String,
     stderr: String,
     message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ToolInstallResult {
+    adb_path: String,
+    scrcpy_path: String,
+    logs: Vec<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -150,6 +163,7 @@ struct PairRequest {
     host: String,
     pair_port: u16,
     pairing_code: String,
+    connect_host: Option<String>,
     connect_port: Option<u16>,
 }
 
@@ -172,6 +186,10 @@ fn config_path() -> Result<PathBuf, String> {
     Ok(config_dir()?.join("config.json"))
 }
 
+fn tools_dir() -> Result<PathBuf, String> {
+    Ok(config_dir()?.join("tools"))
+}
+
 fn load_config() -> AppConfig {
     let Ok(path) = config_path() else {
         return AppConfig::default();
@@ -192,7 +210,12 @@ fn save_config(config: &AppConfig) -> Result<(), String> {
 
 fn validate_executable(path: &str) -> bool {
     let path = Path::new(path);
-    path.exists() && path.is_file()
+    path.exists()
+        && path.is_file()
+        && path
+            .metadata()
+            .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
 }
 
 fn tool_candidates(name: &str, config: &AppConfig) -> Vec<String> {
@@ -275,6 +298,202 @@ fn run_command(path: &str, args: &[&str]) -> CommandResult {
             message: error.to_string(),
         },
     }
+}
+
+fn run_required(path: &str, args: &[&str]) -> Result<CommandResult, String> {
+    let result = run_command(path, args);
+    result.ok.then_some(result.clone()).ok_or(result.message)
+}
+
+fn is_apple_silicon_compatible_file_output(output: &str) -> bool {
+    let output = output.to_ascii_lowercase();
+    output.contains("arm64")
+        || output.contains("universal binary")
+        || output.contains("shell script")
+        || output.contains("text executable")
+}
+
+fn executable_arch(path: &str) -> Option<String> {
+    let result = run_command("/usr/bin/file", &[path]);
+    result.ok.then_some(result.stdout.trim().to_string())
+}
+
+fn download_file(url: &str, target: &Path) -> Result<(), String> {
+    let target = target
+        .to_str()
+        .ok_or_else(|| "download target path is not valid UTF-8".to_string())?;
+    run_required("/usr/bin/curl", &["-fL", "--retry", "3", "-o", target, url])?;
+    Ok(())
+}
+
+fn unzip_archive(archive: &Path, destination: &Path) -> Result<(), String> {
+    let archive = archive
+        .to_str()
+        .ok_or_else(|| "archive path is not valid UTF-8".to_string())?;
+    let destination = destination
+        .to_str()
+        .ok_or_else(|| "destination path is not valid UTF-8".to_string())?;
+    run_required("/usr/bin/unzip", &["-q", "-o", archive, "-d", destination])?;
+    Ok(())
+}
+
+fn extract_archive(archive: &Path, destination: &Path) -> Result<(), String> {
+    let archive_name = archive
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or_default();
+    if archive_name.ends_with(".tar.gz") || archive_name.ends_with(".tgz") {
+        fs::create_dir_all(destination).map_err(|error| error.to_string())?;
+        let archive = archive
+            .to_str()
+            .ok_or_else(|| "archive path is not valid UTF-8".to_string())?;
+        let destination = destination
+            .to_str()
+            .ok_or_else(|| "destination path is not valid UTF-8".to_string())?;
+        run_required("/usr/bin/tar", &["-xzf", archive, "-C", destination])?;
+        Ok(())
+    } else {
+        unzip_archive(archive, destination)
+    }
+}
+
+fn file_sha256(path: &Path) -> Result<String, String> {
+    let path = path
+        .to_str()
+        .ok_or_else(|| "checksum path is not valid UTF-8".to_string())?;
+    let result = run_required("/usr/bin/shasum", &["-a", "256", path])?;
+    Ok(result
+        .stdout
+        .split_whitespace()
+        .next()
+        .unwrap_or_default()
+        .to_string())
+}
+
+fn copy_dir_recursive(source: &Path, target: &Path) -> Result<(), String> {
+    if target.exists() {
+        fs::remove_dir_all(target).map_err(|error| error.to_string())?;
+    }
+    fs::create_dir_all(target).map_err(|error| error.to_string())?;
+
+    for entry in fs::read_dir(source).map_err(|error| error.to_string())? {
+        let entry = entry.map_err(|error| error.to_string())?;
+        let source_path = entry.path();
+        let target_path = target.join(entry.file_name());
+        if source_path.is_dir() {
+            copy_dir_recursive(&source_path, &target_path)?;
+        } else {
+            fs::copy(&source_path, &target_path).map_err(|error| error.to_string())?;
+            if source_path
+                .metadata()
+                .map(|metadata| metadata.permissions().mode() & 0o111 != 0)
+                .unwrap_or(false)
+            {
+                fs::set_permissions(&target_path, fs::Permissions::from_mode(0o755))
+                    .map_err(|error| error.to_string())?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn find_file_named(root: &Path, file_name: &str) -> Option<PathBuf> {
+    for entry in fs::read_dir(root).ok()? {
+        let entry = entry.ok()?;
+        let path = entry.path();
+        if path.is_dir() {
+            if let Some(found) = find_file_named(&path, file_name) {
+                return Some(found);
+            }
+        } else if path.file_name().and_then(|name| name.to_str()) == Some(file_name) {
+            return Some(path);
+        }
+    }
+    None
+}
+
+fn find_scrcpy_macos_aarch64_asset(payload: &str) -> Result<String, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(payload).map_err(|error| error.to_string())?;
+    let assets = value
+        .get("assets")
+        .and_then(|assets| assets.as_array())
+        .ok_or_else(|| "scrcpy release response did not include assets".to_string())?;
+
+    assets
+        .iter()
+        .find_map(|asset| {
+            let name = asset.get("name")?.as_str()?.to_ascii_lowercase();
+            let url = asset.get("browser_download_url")?.as_str()?;
+            (name.contains("macos")
+                && name.contains("aarch64")
+                && (name.ends_with(".zip") || name.ends_with(".tar.gz") || name.ends_with(".tgz")))
+            .then_some(url.to_string())
+        })
+        .ok_or_else(|| "未找到 scrcpy macOS Apple Silicon 下载包".to_string())
+}
+
+fn install_platform_tools(
+    logs: &mut Vec<String>,
+    temp_dir: &Path,
+    tools_dir: &Path,
+) -> Result<String, String> {
+    let archive = temp_dir.join("platform-tools.zip");
+    let unzip_dir = temp_dir.join("platform-tools-unzip");
+    logs.push("下载 Android SDK Platform Tools".to_string());
+    download_file(PLATFORM_TOOLS_URL, &archive)?;
+    logs.push(format!("platform-tools sha256 {}", file_sha256(&archive)?));
+    unzip_archive(&archive, &unzip_dir)?;
+
+    let source = unzip_dir.join("platform-tools");
+    let target = tools_dir.join("platform-tools");
+    copy_dir_recursive(&source, &target)?;
+    let adb = target.join("adb");
+    fs::set_permissions(&adb, fs::Permissions::from_mode(0o755))
+        .map_err(|error| error.to_string())?;
+    let adb_path = adb.to_string_lossy().to_string();
+    run_required(&adb_path, &["version"])?;
+    Ok(adb_path)
+}
+
+fn install_scrcpy(
+    logs: &mut Vec<String>,
+    temp_dir: &Path,
+    tools_dir: &Path,
+) -> Result<String, String> {
+    logs.push("查询 scrcpy 最新 macOS Apple Silicon 版本".to_string());
+    let api_result = run_required(
+        "/usr/bin/curl",
+        &[
+            "-fsSL",
+            "-H",
+            "Accept: application/vnd.github+json",
+            SCRCPY_RELEASE_API,
+        ],
+    )?;
+    let url = find_scrcpy_macos_aarch64_asset(&api_result.stdout)?;
+    let archive_name = url.rsplit('/').next().unwrap_or("scrcpy-download");
+    let archive = temp_dir.join(archive_name);
+    let unzip_dir = temp_dir.join("scrcpy-unzip");
+    logs.push("下载 scrcpy macOS Apple Silicon 包".to_string());
+    download_file(&url, &archive)?;
+    logs.push(format!("scrcpy sha256 {}", file_sha256(&archive)?));
+    extract_archive(&archive, &unzip_dir)?;
+
+    let scrcpy_bin = find_file_named(&unzip_dir, "scrcpy")
+        .ok_or_else(|| "scrcpy 下载包中未找到 scrcpy 可执行文件".to_string())?;
+    let source = scrcpy_bin
+        .parent()
+        .ok_or_else(|| "scrcpy 可执行文件路径异常".to_string())?;
+    let target = tools_dir.join("scrcpy");
+    copy_dir_recursive(source, &target)?;
+    let scrcpy = target.join("scrcpy");
+    fs::set_permissions(&scrcpy, fs::Permissions::from_mode(0o755))
+        .map_err(|error| error.to_string())?;
+    let scrcpy_path = scrcpy.to_string_lossy().to_string();
+    run_required(&scrcpy_path, &["--version"])?;
+    Ok(scrcpy_path)
 }
 
 fn translate_error(stdout: &str, stderr: &str) -> String {
@@ -467,6 +686,15 @@ fn refresh_session_status(entry: &mut SessionEntry) {
     }
 }
 
+fn has_running_session_for_serial<'a>(
+    sessions: impl IntoIterator<Item = &'a SessionInfo>,
+    serial: &str,
+) -> bool {
+    sessions
+        .into_iter()
+        .any(|session| session.serial == serial && session.status == "running")
+}
+
 #[tauri::command]
 fn get_app_config(state: State<'_, AppState>) -> Result<AppConfig, String> {
     state
@@ -601,19 +829,62 @@ fn get_tool_status(state: State<'_, AppState>) -> Result<ToolStatus, String> {
         .map(|path| run_command(path, &["version"]))
         .and_then(|result| result.ok.then_some(result.stdout))
         .and_then(|text| second_line(Some(text)));
+    let adb_arch = adb_path.as_deref().and_then(executable_arch);
     let scrcpy_version = scrcpy_path
         .as_deref()
         .map(|path| run_command(path, &["--version"]))
         .and_then(|result| result.ok.then_some(result.stdout))
         .and_then(|text| first_line(Some(text)));
+    let scrcpy_arch = scrcpy_path.as_deref().and_then(executable_arch);
+    let adb_arch_ok = adb_arch
+        .as_deref()
+        .map(is_apple_silicon_compatible_file_output)
+        .unwrap_or(false);
+    let scrcpy_arch_ok = scrcpy_arch
+        .as_deref()
+        .map(is_apple_silicon_compatible_file_output)
+        .unwrap_or(false);
 
     Ok(ToolStatus {
-        adb_ok: adb_path.is_some(),
-        scrcpy_ok: scrcpy_path.is_some(),
+        adb_ok: adb_version.is_some() && adb_arch_ok,
+        scrcpy_ok: scrcpy_version.is_some() && scrcpy_arch_ok,
         adb_path,
         scrcpy_path,
         adb_version,
         scrcpy_version,
+        adb_arch,
+        scrcpy_arch,
+    })
+}
+
+#[tauri::command]
+fn install_tools(state: State<'_, AppState>) -> Result<ToolInstallResult, String> {
+    let dir = tools_dir()?;
+    let temp_dir = config_dir()?.join("install-tmp");
+    if temp_dir.exists() {
+        fs::remove_dir_all(&temp_dir).map_err(|error| error.to_string())?;
+    }
+    fs::create_dir_all(&temp_dir).map_err(|error| error.to_string())?;
+    fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
+
+    let mut logs = Vec::new();
+    let adb_path = install_platform_tools(&mut logs, &temp_dir, &dir)?;
+    let scrcpy_path = install_scrcpy(&mut logs, &temp_dir, &dir)?;
+    let _ = fs::remove_dir_all(&temp_dir);
+
+    let mut config = state
+        .config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_string())?;
+    config.adb_path = Some(adb_path.clone());
+    config.scrcpy_path = Some(scrcpy_path.clone());
+    save_config(&config)?;
+
+    logs.push("工具安装完成".to_string());
+    Ok(ToolInstallResult {
+        adb_path,
+        scrcpy_path,
+        logs,
     })
 }
 
@@ -715,7 +986,13 @@ fn adb_pair(state: State<'_, AppState>, request: PairRequest) -> Result<CommandR
         }
 
         if let Some(connect_port) = request.connect_port {
-            let connect_endpoint = format!("{}:{connect_port}", request.host.trim());
+            let connect_host = request
+                .connect_host
+                .as_deref()
+                .map(str::trim)
+                .filter(|host| !host.is_empty())
+                .unwrap_or_else(|| request.host.trim());
+            let connect_endpoint = format!("{connect_host}:{connect_port}");
             let connect_result = run_command(&adb, &["connect", &connect_endpoint]);
             if !connect_result.ok {
                 return Err(connect_result.message);
@@ -767,6 +1044,17 @@ fn start_scrcpy(
     }
     .to_string();
     let args = build_scrcpy_args(&serial, &options);
+    let mut sessions = state
+        .sessions
+        .lock()
+        .map_err(|_| "sessions lock poisoned".to_string())?;
+    for entry in sessions.values_mut() {
+        refresh_session_status(entry);
+    }
+    if has_running_session_for_serial(sessions.values().map(|entry| &entry.info), &serial) {
+        return Err("该设备已有运行中的投屏会话，请先停止后再重连".to_string());
+    }
+
     let mut child = Command::new(&scrcpy)
         .args(&args)
         .stdin(Stdio::null())
@@ -800,10 +1088,6 @@ fn start_scrcpy(
         last_message: None,
     };
 
-    let mut sessions = state
-        .sessions
-        .lock()
-        .map_err(|_| "sessions lock poisoned".to_string())?;
     sessions.insert(
         session_id,
         SessionEntry {
@@ -902,6 +1186,7 @@ fn stop_all_sessions(state: State<'_, AppState>) -> Result<Vec<SessionInfo>, Str
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             config: Mutex::new(load_config()),
             sessions: Mutex::new(HashMap::new()),
@@ -914,6 +1199,7 @@ pub fn run() {
             save_device_scrcpy_options,
             clear_device_scrcpy_options,
             get_tool_status,
+            install_tools,
             list_devices,
             adb_tcpip,
             adb_connect,
@@ -927,4 +1213,89 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running DroidDock");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn validate_executable_rejects_plain_files_without_execute_bits() {
+        let path = std::env::temp_dir().join(format!("droiddock-test-{}", now_secs()));
+        fs::write(&path, "not executable").unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
+
+        assert!(!validate_executable(path.to_str().unwrap()));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn scrcpy_release_parser_prefers_macos_aarch64_zip_asset() {
+        let payload = r#"{
+          "assets": [
+            { "name": "scrcpy-win64.zip", "browser_download_url": "https://example.test/win.zip" },
+            { "name": "scrcpy-macos-aarch64-v3.3.3.zip", "browser_download_url": "https://example.test/scrcpy-macos-aarch64-v3.3.3.zip" }
+          ]
+        }"#;
+
+        assert_eq!(
+            find_scrcpy_macos_aarch64_asset(payload).unwrap(),
+            "https://example.test/scrcpy-macos-aarch64-v3.3.3.zip"
+        );
+    }
+
+    #[test]
+    fn scrcpy_release_parser_accepts_current_macos_aarch64_tarball_asset() {
+        let payload = r#"{
+          "assets": [
+            { "name": "scrcpy-macos-aarch64-v3.3.4.tar.gz", "browser_download_url": "https://example.test/scrcpy-macos-aarch64-v3.3.4.tar.gz" }
+          ]
+        }"#;
+
+        assert_eq!(
+            find_scrcpy_macos_aarch64_asset(payload).unwrap(),
+            "https://example.test/scrcpy-macos-aarch64-v3.3.4.tar.gz"
+        );
+    }
+
+    #[test]
+    fn apple_silicon_arch_parser_accepts_arm64_universal_and_scripts() {
+        assert!(is_apple_silicon_compatible_file_output(
+            "Mach-O 64-bit executable arm64"
+        ));
+        assert!(is_apple_silicon_compatible_file_output(
+            "Mach-O universal binary with 2 architectures"
+        ));
+        assert!(is_apple_silicon_compatible_file_output(
+            "POSIX shell script text executable"
+        ));
+        assert!(!is_apple_silicon_compatible_file_output(
+            "Mach-O 64-bit executable x86_64"
+        ));
+    }
+
+    #[test]
+    fn running_session_detector_blocks_duplicate_serials_only_when_active() {
+        let running = SessionInfo {
+            session_id: "one".to_string(),
+            serial: "SERIAL-1".to_string(),
+            alias: None,
+            pid: 1,
+            status: "running".to_string(),
+            started_at: 1,
+            connection: "usb".to_string(),
+            args: vec![],
+            last_message: None,
+        };
+        let stopped = SessionInfo {
+            status: "stopped".to_string(),
+            ..running.clone()
+        };
+
+        assert!(has_running_session_for_serial([&running], "SERIAL-1"));
+        assert!(!has_running_session_for_serial([&stopped], "SERIAL-1"));
+        assert!(!has_running_session_for_serial([&running], "SERIAL-2"));
+    }
 }

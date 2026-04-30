@@ -28,9 +28,10 @@ function applyPreset(id: PresetId) {
         </button>
       </div>
       <div class="settings-panel">
-        <div class="section-label">画面与控制参数</div>
-        <ParameterEditor v-model:options="store.globalDraftOptions" />
+        <div class="section-label">画面参数</div>
+        <ParameterEditor v-model:options="store.globalDraftOptions" variant="settings" />
       </div>
+      <div class="section-label">常见错误说明</div>
       <div class="error-table">
         <div><span class="mono">unauthorized</span><span>请解锁手机，并在弹窗中允许 USB 调试</span></div>
         <div><span class="mono">offline</span><span>设备已离线，请重新插拔或重连无线调试</span></div>

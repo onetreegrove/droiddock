@@ -10,6 +10,7 @@ import {
   type ScrcpyOptions,
   type SessionInfo,
   type SessionLogLine,
+  type ToolInstallResult,
   type ToolStatus,
 } from '../types/app';
 import { defaultScrcpyOptions, mergeScrcpyOptions } from '../domain/scrcpyOptions';
@@ -17,6 +18,7 @@ import { defaultScrcpyOptions, mergeScrcpyOptions } from '../domain/scrcpyOption
 type BusyKey =
   | 'config'
   | 'tools'
+  | 'install'
   | 'devices'
   | 'sessions'
   | 'start'
@@ -38,6 +40,7 @@ export const useAppStore = defineStore('app', {
     busy: {} as Record<BusyKey, boolean>,
     logs: [] as string[],
     sessionLogs: {} as Record<string, SessionLogLine[]>,
+    selectedLogSessionId: null as string | null,
     globalDraftOptions: { ...defaultScrcpyOptions } as ScrcpyOptions,
     globalDraftPresetId: 'daily' as PresetId,
     deviceDraftOptions: {} as Record<string, ScrcpyOptions>,
@@ -136,6 +139,39 @@ export const useAppStore = defineStore('app', {
         this.log(`工具检查失败: ${String(error)}`);
       } finally {
         this.setBusy('tools', false);
+      }
+    },
+
+    async setToolPath(tool: 'adb' | 'scrcpy', path: string) {
+      this.setBusy('tools', true);
+      try {
+        const adbPath = tool === 'adb' ? path : (this.appConfig?.adb_path ?? this.toolStatus?.adb_path ?? null);
+        const scrcpyPath =
+          tool === 'scrcpy' ? path : (this.appConfig?.scrcpy_path ?? this.toolStatus?.scrcpy_path ?? null);
+        this.appConfig = await invoke<AppConfig>('set_tool_paths', { adbPath, scrcpyPath });
+        await this.fetchToolStatus();
+        this.log(`已更新 ${tool} 路径`);
+      } catch (error) {
+        this.log(`更新工具路径失败: ${String(error)}`);
+        throw error;
+      } finally {
+        this.setBusy('tools', false);
+      }
+    },
+
+    async installTools() {
+      this.setBusy('install', true);
+      try {
+        const result = await invoke<ToolInstallResult>('install_tools');
+        this.log(result.logs.join(' / '));
+        await this.fetchAppConfig();
+        await this.fetchToolStatus();
+        return result;
+      } catch (error) {
+        this.log(`自动安装失败: ${String(error)}`);
+        throw error;
+      } finally {
+        this.setBusy('install', false);
       }
     },
 
@@ -258,6 +294,13 @@ export const useAppStore = defineStore('app', {
         this.sessionLogs[sessionId] = logs;
       } catch (error) {
         this.log(`读取会话日志失败: ${String(error)}`);
+      }
+    },
+
+    async openSessionLogs(sessionId: string) {
+      this.selectedLogSessionId = this.selectedLogSessionId === sessionId ? null : sessionId;
+      if (this.selectedLogSessionId) {
+        await this.fetchSessionLogs(sessionId);
       }
     },
   },

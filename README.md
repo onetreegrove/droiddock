@@ -35,6 +35,12 @@ npm run tauri:dev
 npm run tauri:build
 ```
 
+如果本机 `hdiutil` 无法创建 DMG，可先构建可运行的 `.app`：
+
+```bash
+npm run tauri:build:app
+```
+
 ## 文档
 
 - [产品需求文档](docs/product-requirements.md)
