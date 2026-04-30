@@ -5,7 +5,7 @@ dist-ssr/
 target/
 src-tauri/target/
 .npm-cache/
+.worktrees/
 .electron-cache/
 .electron-builder-cache/
 *.log
-
