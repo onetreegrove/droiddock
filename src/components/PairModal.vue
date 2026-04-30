@@ -10,6 +10,7 @@ const pairingCode = ref('');
 const connectHost = ref('');
 const connectPort = ref('');
 const connectHostEdited = ref(false);
+const errorMessage = ref('');
 
 function updatePairHost(value: string) {
   pairHost.value = value;
@@ -24,22 +25,27 @@ function updateConnectHost(value: string) {
 }
 
 async function submit() {
-  await store.adbPair(
-    buildPairRequest({
-      pairHost: pairHost.value,
-      pairPort: pairPort.value,
-      pairingCode: pairingCode.value,
-      connectHost: connectHost.value,
-      connectPort: connectPort.value,
-    }),
-  );
-  pairHost.value = '';
-  pairPort.value = '';
-  pairingCode.value = '';
-  connectHost.value = '';
-  connectPort.value = '';
-  connectHostEdited.value = false;
-  store.modal = null;
+  errorMessage.value = '';
+  try {
+    await store.adbPair(
+      buildPairRequest({
+        pairHost: pairHost.value,
+        pairPort: pairPort.value,
+        pairingCode: pairingCode.value,
+        connectHost: connectHost.value,
+        connectPort: connectPort.value,
+      }),
+    );
+    pairHost.value = '';
+    pairPort.value = '';
+    pairingCode.value = '';
+    connectHost.value = '';
+    connectPort.value = '';
+    connectHostEdited.value = false;
+    store.modal = null;
+  } catch (error) {
+    errorMessage.value = String(error instanceof Error ? error.message : error);
+  }
 }
 </script>
 
@@ -69,6 +75,7 @@ async function submit() {
           <label>连接 IP<input :value="connectHost" class="field-input" placeholder="192.168.1.100" @input="updateConnectHost(($event.target as HTMLInputElement).value)" /></label>
           <label>连接端口<input v-model="connectPort" class="field-input" placeholder="39845" /></label>
         </div>
+        <div v-if="errorMessage" class="modal-error">{{ errorMessage }}</div>
       </div>
       <footer class="modal-footer">
         <button class="btn btn-ghost" @click="store.modal = null">取消</button>

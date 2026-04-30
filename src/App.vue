@@ -18,6 +18,10 @@ let poller: number | undefined;
 let unlistenClose: UnlistenFn | undefined;
 const devicesSubtitle = computed(() => `${store.devices.length} 台已发现 · ${store.availableDeviceCount} 台可用`);
 
+function hasTauriWindowMetadata() {
+  return Boolean((window as Window & { __TAURI_INTERNALS__?: { metadata?: unknown } }).__TAURI_INTERNALS__?.metadata);
+}
+
 onMounted(async () => {
   await store.fetchAppConfig();
   await store.fetchToolStatus();
@@ -33,6 +37,8 @@ onMounted(async () => {
       }
     }
   }, 3000);
+
+  if (!hasTauriWindowMetadata()) return;
 
   unlistenClose = await getCurrentWindow().onCloseRequested(async (event) => {
     const runningCount = store.sessions.filter((session) => session.status === 'running').length;

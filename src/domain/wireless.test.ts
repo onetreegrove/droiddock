@@ -39,4 +39,16 @@ describe('wireless device helpers', () => {
       connect_host: null,
     });
   });
+
+  it('rejects a pair port outside the adb u16 port range', () => {
+    expect(() =>
+      buildPairRequest({
+        pairHost: '192.168.1.100',
+        pairPort: '728115',
+        pairingCode: '123456',
+        connectHost: '192.168.1.100',
+        connectPort: '39845',
+      }),
+    ).toThrow('配对端口必须是 1-65535 之间的数字');
+  });
 });
