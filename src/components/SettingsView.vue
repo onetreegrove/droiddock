@@ -1,77 +1,43 @@
 <script setup lang="ts">
+import ParameterEditor from './ParameterEditor.vue';
+import AppHeader from './AppHeader.vue';
+import { presetLabels, presetOptions } from '../domain/scrcpyOptions';
+import type { PresetId } from '../types/app';
 import { useAppStore } from '../stores/app';
 
 const store = useAppStore();
+
+function applyPreset(id: PresetId) {
+  store.globalDraftPresetId = id;
+  store.globalDraftOptions = { ...presetOptions[id] };
+}
 </script>
 
 <template>
-  <div class="view-content">
-    <h1>设置</h1>
-    <p>管理工具路径和应用偏好。</p>
-
-    <div class="card">
-      <h2>工具状态</h2>
-      <div class="tool-list">
-        <div class="tool-item">
-          <div class="tool-info">
-            <strong>ADB (Android 调试桥)</strong>
-            <span>{{ store.toolStatus?.adb_path || '未找到' }}</span>
-          </div>
-          <span :class="['badge', store.toolStatus?.adb_path ? 'badge-wireless' : 'badge-offline']">
-            {{ store.toolStatus?.adb_version || '缺失' }}
-          </span>
-        </div>
-
-        <div class="tool-item">
-          <div class="tool-info">
-            <strong>scrcpy</strong>
-            <span>{{ store.toolStatus?.scrcpy_path || '未找到' }}</span>
-          </div>
-          <span :class="['badge', store.toolStatus?.scrcpy_path ? 'badge-wireless' : 'badge-offline']">
-            {{ store.toolStatus?.scrcpy_version || '缺失' }}
-          </span>
-        </div>
+  <section class="page">
+    <AppHeader title="参数设置" subtitle="全局默认投屏参数，适用于所有未单独配置的设备">
+      <template #actions>
+        <button class="btn btn-primary" @click="store.saveDefaultOptions(store.globalDraftOptions, store.globalDraftPresetId)">保存全局默认</button>
+      </template>
+    </AppHeader>
+    <div class="settings-body">
+      <div class="section-label">快速应用预设</div>
+      <div class="preset-row">
+        <button v-for="(label, id) in presetLabels" :key="id" :class="['preset-chip', { on: store.globalDraftPresetId === id }]" @click="applyPreset(id as PresetId)">
+          {{ label }}
+        </button>
       </div>
-      
-      <div style="margin-top: 24px; display: flex; gap: 12px;">
-        <button class="primary" @click="store.fetchToolStatus">刷新工具状态</button>
-        <button class="secondary">自动安装 (Apple Silicon)</button>
-        <button class="secondary">手动配置</button>
+      <div class="settings-panel">
+        <div class="section-label">画面与控制参数</div>
+        <ParameterEditor v-model:options="store.globalDraftOptions" />
+      </div>
+      <div class="error-table">
+        <div><span class="mono">unauthorized</span><span>请解锁手机，并在弹窗中允许 USB 调试</span></div>
+        <div><span class="mono">offline</span><span>设备已离线，请重新插拔或重连无线调试</span></div>
+        <div><span class="mono">Connection refused</span><span>无线调试端口不可用，请检查 IP 和端口</span></div>
+        <div><span class="mono">failed to authenticate</span><span>配对失败，请重新生成配对码</span></div>
+        <div><span class="mono">device not found</span><span>设备不存在或已断开，请刷新设备列表</span></div>
       </div>
     </div>
-
-    <div class="card">
-      <h2>关于 DroidDock</h2>
-      <p>版本 0.1.0 (Alpha)</p>
-      <p>专为 macOS Apple Silicon 构建。基于 Tauri 和 Vue 3。</p>
-    </div>
-  </div>
+  </section>
 </template>
-
-<style scoped>
-.tool-list {
-  display: grid;
-  gap: 16px;
-}
-
-.tool-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-}
-
-.tool-info {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.tool-info span {
-  font-family: ui-monospace, monospace;
-  font-size: 11px;
-  color: var(--muted);
-}
-</style>
