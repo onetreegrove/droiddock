@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPairRequest, deviceIpAddress } from './wireless';
+import { buildConnectEndpoint, buildPairRequest, deviceIpAddress, splitConnectEndpoint } from './wireless';
 
 describe('wireless device helpers', () => {
   it('extracts IP address from a wireless adb serial', () => {
@@ -50,5 +50,14 @@ describe('wireless device helpers', () => {
         connectPort: '39845',
       }),
     ).toThrow('配对端口必须是 1-65535 之间的数字');
+  });
+
+  it('lets an already paired endpoint reconnect with an edited port', () => {
+    expect(splitConnectEndpoint('192.168.1.105:39845')).toEqual({
+      host: '192.168.1.105',
+      port: '39845',
+    });
+
+    expect(buildConnectEndpoint('192.168.1.105', '41235')).toBe('192.168.1.105:41235');
   });
 });

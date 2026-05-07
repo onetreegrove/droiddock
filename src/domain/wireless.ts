@@ -30,6 +30,29 @@ function parsePort(value: string, label: string, required: boolean): number | nu
   return port;
 }
 
+export function splitConnectEndpoint(endpoint: string): { host: string; port: string } {
+  const trimmed = endpoint.trim();
+  const separator = trimmed.lastIndexOf(':');
+  if (separator <= 0 || separator === trimmed.length - 1) {
+    return { host: trimmed, port: '' };
+  }
+
+  return {
+    host: trimmed.slice(0, separator),
+    port: trimmed.slice(separator + 1),
+  };
+}
+
+export function buildConnectEndpoint(host: string, port: string): string {
+  const trimmedHost = host.trim();
+  if (!trimmedHost) {
+    throw new Error('连接 IP 不能为空');
+  }
+
+  const connectPort = parsePort(port, '连接端口', true);
+  return `${trimmedHost}:${connectPort}`;
+}
+
 export function buildPairRequest(values: PairFormValues): PairRequest {
   const pairHost = values.pairHost.trim();
   const connectHost = values.connectHost.trim();
