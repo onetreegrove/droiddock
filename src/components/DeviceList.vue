@@ -44,35 +44,15 @@ function stateTone(state: string) {
             <StatusChip tone="gray" :label="device.connection === 'usb' ? 'USB' : '无线'" />
           </div>
         </div>
-        <div class="device-serial mono">{{ device.serial }}</div>
         <div v-if="device.state === 'unauthorized'" class="device-warning">
-          <svg width="11" height="11" viewBox="0 0 11 11" fill="none" aria-hidden="true">
-            <path d="M5.5 1L10 9.5H1L5.5 1Z" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round" />
-            <path d="M5.5 4.5v2M5.5 7.5v.4" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" />
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+            <path d="M6 1.5L10.5 10H1.5L6 1.5Z" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round" />
+            <path d="M6 5v2M6 8.5v.4" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
           </svg>
           请在手机上允许 USB 调试授权
         </div>
       </button>
-      <div v-if="store.devices.length === 0" class="empty-panel">未检测到设备，请连接 USB 或使用 ADB Pair。</div>
-      <div class="connection-actions">
-        <div class="section-label">连接方式</div>
-        <button class="connection-button" @click="store.modal = 'wireless'">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <path d="M2 4.5c1.1-1.1 2.6-1.8 4-1.8s2.9.7 4 1.8" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" />
-            <path d="M4 7c.6-.6 1.4-1 2-1s1.4.4 2 1" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" />
-            <circle cx="6" cy="9.5" r=".8" fill="currentColor" />
-          </svg>
-          USB 转无线连接
-        </button>
-        <button class="connection-button" @click="store.modal = 'pair'">
-          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-            <rect x="1" y="2.5" width="4" height="7" rx="1" stroke="currentColor" stroke-width="1.1" />
-            <rect x="7" y="2.5" width="4" height="7" rx="1" stroke="currentColor" stroke-width="1.1" />
-            <path d="M5 6h2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" />
-          </svg>
-          ADB Pair 无线配对
-        </button>
-      </div>
+      <div v-if="store.devices.length === 0" class="empty-panel">未检测到设备，请连接 USB 或使用首页的无线连接向导。</div>
     </div>
   </section>
 </template>

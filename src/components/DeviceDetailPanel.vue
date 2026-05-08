@@ -55,6 +55,13 @@ async function launch() {
   store.sessionDraftOptions[device.value.serial] = { ...editorOptions.value };
   await store.startMirror(device.value.serial, editorOptions.value);
 }
+
+async function handleEditAlias() {
+  if (!device.value) return;
+  const newAlias = window.prompt('输入设备别名', device.value.alias || device.value.model || '');
+  if (newAlias === null) return;
+  await store.saveDeviceAlias(device.value.serial, newAlias.trim() || null);
+}
 </script>
 
 <template>
@@ -68,8 +75,15 @@ async function launch() {
             <rect x="6.5" y="4" width="7" height="1" rx=".5" fill="currentColor" opacity=".4" />
           </svg>
         </div>
-        <div>
-          <div class="hero-title">{{ device.alias || device.model || '未知设备' }}</div>
+        <div class="device-hero-info">
+          <div class="hero-title-row">
+            <div class="hero-title">{{ device.alias || device.model || '未知设备' }}</div>
+            <button class="btn-icon-sm" title="编辑别名" @click="handleEditAlias">
+              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+                <path d="M2.5 11.5v-2l6-6 2 2-6 6h-2zM9.5 2.5l2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
+              </svg>
+            </button>
+          </div>
           <div class="hero-chips">
             <StatusChip
               :tone="device.state === 'device' ? 'green' : device.state === 'unauthorized' ? 'yellow' : 'red'"

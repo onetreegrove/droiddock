@@ -1,4 +1,4 @@
-export type PageKey = 'devices' | 'sessions' | 'setup' | 'settings';
+export type PageKey = 'dashboard' | 'devices' | 'sessions' | 'setup' | 'settings';
 
 export type ModalKey = null | 'pair' | 'wireless' | 'logs';
 

@@ -33,7 +33,7 @@ export const useAppStore = defineStore('app', {
     appConfig: null as AppConfig | null,
     devices: [] as Device[],
     sessions: [] as SessionInfo[],
-    currentPage: 'devices' as PageKey,
+    currentPage: 'dashboard' as PageKey,
     selectedSerial: null as string | null,
     modal: null as ModalKey,
     loading: false,
@@ -242,6 +242,17 @@ export const useAppStore = defineStore('app', {
         this.log(`停止全部失败: ${String(error)}`);
       } finally {
         this.setBusy('stop', false);
+      }
+    },
+
+    async saveDeviceAlias(serial: string, alias: string | null) {
+      try {
+        this.appConfig = await invoke<AppConfig>('save_device_alias', { serial, alias: alias ?? '' });
+        await this.refreshDevices();
+        this.log(`已更新设备别名: ${serial} -> ${alias || '恢复默认'}`);
+      } catch (error) {
+        this.log(`保存别名失败: ${String(error)}`);
+        throw error;
       }
     },
 

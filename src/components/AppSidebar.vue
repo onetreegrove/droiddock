@@ -8,8 +8,8 @@ const runningCount = computed(() => store.sessions.filter((session) => session.s
 
 <template>
   <aside class="sidebar">
-    <div class="titlebar"></div>
-    <div class="brand">
+    <div class="titlebar" data-tauri-drag-region></div>
+    <div class="brand" data-tauri-drag-region>
       <div class="brand-icon">
         <svg width="18" height="18" viewBox="0 0 18 18" fill="none" aria-hidden="true">
           <rect x="2.5" y="1.5" width="8" height="15" rx="2" fill="currentColor" opacity=".9" />
@@ -25,6 +25,15 @@ const runningCount = computed(() => store.sessions.filter((session) => session.s
     </div>
     <div class="sidebar-divider"></div>
     <nav class="nav">
+      <button :class="['nav-item', { active: store.currentPage === 'dashboard' }]" @click="store.currentPage = 'dashboard'">
+        <span class="nav-icon">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+            <path d="M2 7.5L8 2l6 5.5V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5z" stroke="currentColor" stroke-width="1.3" />
+            <path d="M6 15V9h4v6" stroke="currentColor" stroke-width="1.3" />
+          </svg>
+        </span>
+        <span>首页</span>
+      </button>
       <button :class="['nav-item', { active: store.currentPage === 'devices' }]" @click="store.currentPage = 'devices'">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -65,8 +74,7 @@ const runningCount = computed(() => store.sessions.filter((session) => session.s
     </nav>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-footer">
-      <div class="tool-version"><span class="mono">adb</span><span class="mono">{{ store.toolStatus?.adb_version || '-' }}</span></div>
-      <div class="tool-version"><span class="mono">scrcpy</span><span class="mono">{{ store.toolStatus?.scrcpy_version || '-' }}</span></div>
+      <div class="tool-version"><span>DroidDock</span><span>v1.0.0</span></div>
     </div>
   </aside>
 </template>
