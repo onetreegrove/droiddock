@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useAppStore } from '../stores/app';
+import { useUiStore } from '../stores/ui';
 import AppHeader from './AppHeader.vue';
 import SessionCard from './SessionCard.vue';
 
 const store = useAppStore();
+const ui = useUiStore();
 const runningSessions = computed(() => store.sessions.filter(s => s.status === 'running'));
 
 const toolSteps = computed(() => [
@@ -51,7 +53,7 @@ const toolSteps = computed(() => [
               </div>
               <p class="tool-status-desc">{{ tool.desc }}</p>
               <div v-if="!tool.ok" class="tool-status-action">
-                <button class="btn btn-primary btn-sm" @click="store.currentPage = 'setup'">立即配置</button>
+                <button class="btn btn-primary btn-sm" @click="ui.openPage('setup')">立即配置</button>
               </div>
             </div>
           </div>
@@ -62,7 +64,7 @@ const toolSteps = computed(() => [
       <section class="dashboard-section">
         <div class="section-label">快速连接</div>
         <div class="action-grid">
-          <button class="dashboard-card action-card" @click="store.modal = 'wireless'">
+          <button class="dashboard-card action-card" @click="ui.openModal('wireless')">
             <div class="action-icon">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01" />
@@ -73,7 +75,7 @@ const toolSteps = computed(() => [
               <div class="action-desc">将已连接的 USB 设备切换至 Wi-Fi 模式</div>
             </div>
           </button>
-          <button class="dashboard-card action-card" @click="store.modal = 'pair'">
+          <button class="dashboard-card action-card" @click="ui.openModal('pair')">
             <div class="action-icon">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="3" y="2" width="18" height="20" rx="2" />
@@ -109,7 +111,7 @@ const toolSteps = computed(() => [
           <div class="empty-guide-content">
             <h3>准备好开始了吗？</h3>
             <p>连接你的 Android 设备到电脑，或者使用上方的无线连接向导。</p>
-            <button class="btn btn-primary" @click="store.currentPage = 'devices'">查看设备列表</button>
+            <button class="btn btn-primary" @click="ui.openPage('devices')">查看设备列表</button>
           </div>
         </div>
       </section>

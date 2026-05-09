@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { ref } from 'vue';
 import { useAppStore } from '../stores/app';
+import { useUiStore } from '../stores/ui';
 import { buildPairRequest } from '../domain/wireless';
 
 const store = useAppStore();
+const ui = useUiStore();
 const pairHost = ref('');
 const pairPort = ref('');
 const pairingCode = ref('');
@@ -42,7 +44,7 @@ async function submit() {
     connectHost.value = '';
     connectPort.value = '';
     connectHostEdited.value = false;
-    store.modal = null;
+    ui.closeModal();
   } catch (error) {
     errorMessage.value = String(error instanceof Error ? error.message : error);
   }
@@ -50,11 +52,11 @@ async function submit() {
 </script>
 
 <template>
-  <div class="modal-overlay" @click.self="store.modal = null">
+  <div class="modal-overlay" @click.self="ui.closeModal()">
     <section class="modal-card">
       <header class="modal-header">
         <div><div class="modal-title">ADB Pair 无线配对</div><div class="modal-subtitle">适用于 Android 11+ 无线调试</div></div>
-        <button class="modal-close" aria-label="关闭" @click="store.modal = null">
+        <button class="modal-close" aria-label="关闭" @click="ui.closeModal()">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M2 2l8 8M10 2L2 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
           </svg>
@@ -78,7 +80,7 @@ async function submit() {
         <div v-if="errorMessage" class="modal-error">{{ errorMessage }}</div>
       </div>
       <footer class="modal-footer">
-        <button class="btn btn-ghost" @click="store.modal = null">取消</button>
+        <button class="btn btn-ghost" @click="ui.closeModal()">取消</button>
         <button class="btn btn-primary" :disabled="!pairHost || !pairPort || !pairingCode" @click="submit">执行配对并连接</button>
       </footer>
     </section>

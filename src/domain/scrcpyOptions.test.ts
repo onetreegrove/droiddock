@@ -11,6 +11,30 @@ import {
 } from './scrcpyOptions';
 
 describe('scrcpy option domain', () => {
+  const consistencyFixture = {
+    serial: 'R9YT301WXXX',
+    options: {
+      maxSize: 1920,
+      maxFps: 60,
+      videoBitRate: '4M',
+      videoCodec: 'h265' as const,
+      noAudio: true,
+      stayAwake: true,
+      alwaysOnTop: true,
+    },
+    args: [
+      '-s',
+      'R9YT301WXXX',
+      '--max-size=1920',
+      '--max-fps=60',
+      '--video-bit-rate=4M',
+      '--video-codec=h265',
+      '--no-audio',
+      '--stay-awake',
+      '--always-on-top',
+    ],
+  };
+
   it('merges global, device, and session options while preserving explicit false', () => {
     const result = mergeScrcpyOptions(
       { ...defaultScrcpyOptions, noAudio: true, stayAwake: true },
@@ -35,27 +59,7 @@ describe('scrcpy option domain', () => {
   });
 
   it('builds scrcpy args in stable UI order', () => {
-    const args = buildScrcpyArgs('R9YT301WXXX', {
-      maxSize: 1920,
-      maxFps: 60,
-      videoBitRate: '4M',
-      videoCodec: 'h265',
-      noAudio: true,
-      stayAwake: true,
-      alwaysOnTop: true,
-    });
-
-    expect(args).toEqual([
-      '-s',
-      'R9YT301WXXX',
-      '--max-size=1920',
-      '--max-fps=60',
-      '--video-bit-rate=4M',
-      '--video-codec=h265',
-      '--no-audio',
-      '--stay-awake',
-      '--always-on-top',
-    ]);
+    expect(buildScrcpyArgs(consistencyFixture.serial, consistencyFixture.options)).toEqual(consistencyFixture.args);
   });
 
   it('skips empty bit rate and default codec in command preview', () => {

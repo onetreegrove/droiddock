@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import StatusChip from './StatusChip.vue';
 import { useAppStore } from '../stores/app';
+import { useUiStore } from '../stores/ui';
 
 const store = useAppStore();
+const ui = useUiStore();
 
 function stateLabel(state: string) {
   if (state === 'device') return '可用';
@@ -25,8 +27,8 @@ function stateTone(state: string) {
       <button
         v-for="device in store.devices"
         :key="device.serial"
-        :class="['device-card', { selected: store.selectedSerial === device.serial }]"
-        @click="store.selectedSerial = device.serial"
+        :class="['device-card', { selected: ui.selectedSerial === device.serial }]"
+        @click="ui.selectedSerial = device.serial"
       >
         <div class="device-card-main">
           <div class="device-icon">

@@ -1,19 +1,15 @@
+import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import { invoke } from '@tauri-apps/api/core';
-import {
-  type AppConfig,
-  type Device,
-  type ModalKey,
-  type PageKey,
-  type PairRequest,
-  type PresetId,
-  type ScrcpyOptions,
-  type SessionInfo,
-  type SessionLogLine,
-  type ToolInstallResult,
-  type ToolStatus,
-} from '../types/app';
+import type { PresetId, ScrcpyOptions } from '../types/app';
+import type { PairRequest } from '../lib/ipc/types';
 import { defaultScrcpyOptions, mergeScrcpyOptions } from '../domain/scrcpyOptions';
+import type { AppErrorPayload } from '../lib/ipc/errors';
+import { invokeCommand } from '../lib/ipc/client';
+import { useConfigStore } from './config';
+import { useDevicesStore } from './devices';
+import { useSessionsStore } from './sessions';
+import { useToolsStore } from './tools';
+import { useUiStore } from './ui';
 
 type BusyKey =
   | 'config'
@@ -27,292 +23,335 @@ type BusyKey =
   | 'wireless'
   | 'settings';
 
-export const useAppStore = defineStore('app', {
-  state: () => ({
-    toolStatus: null as ToolStatus | null,
-    appConfig: null as AppConfig | null,
-    devices: [] as Device[],
-    sessions: [] as SessionInfo[],
-    currentPage: 'dashboard' as PageKey,
-    selectedSerial: null as string | null,
-    modal: null as ModalKey,
-    loading: false,
-    busy: {} as Record<BusyKey, boolean>,
-    logs: [] as string[],
-    sessionLogs: {} as Record<string, SessionLogLine[]>,
-    selectedLogSessionId: null as string | null,
-    globalDraftOptions: { ...defaultScrcpyOptions } as ScrcpyOptions,
-    globalDraftPresetId: 'daily' as PresetId,
-    deviceDraftOptions: {} as Record<string, ScrcpyOptions>,
-    sessionDraftOptions: {} as Record<string, ScrcpyOptions>,
-  }),
+function errorMessage(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'userMessage' in error) {
+    return String((error as AppErrorPayload).userMessage);
+  }
+  return String(error);
+}
 
-  getters: {
-    selectedDevice: (state) => state.devices.find((device) => device.serial === state.selectedSerial) ?? null,
-    isToolsReady: (state) => Boolean(state.toolStatus?.adb_ok && state.toolStatus?.scrcpy_ok),
-    availableDeviceCount: (state) => state.devices.filter((device) => device.state === 'device').length,
-    activeSession: (state) => (serial: string) =>
-      state.sessions.find((session) => session.serial === serial && session.status === 'running') ?? null,
-    deviceOptionEntry: (state) => (serial: string) => state.appConfig?.device_scrcpy_options[serial] ?? null,
-    effectiveOptions: (state) => (serial: string) => {
-      const globalOptions = state.appConfig?.default_scrcpy_options ?? defaultScrcpyOptions;
-      const deviceOptions = state.appConfig?.device_scrcpy_options[serial]?.options;
-      const sessionOptions = state.sessionDraftOptions[serial];
-      return mergeScrcpyOptions(globalOptions, deviceOptions, sessionOptions);
-    },
-  },
+export const useAppStore = defineStore('app', () => {
+  const config = useConfigStore();
+  const devicesStore = useDevicesStore();
+  const sessionsStore = useSessionsStore();
+  const tools = useToolsStore();
+  const ui = useUiStore();
 
-  actions: {
-    log(message: string) {
-      const time = new Date().toLocaleTimeString();
-      this.logs.unshift(`[${time}] ${message}`);
-      this.logs = this.logs.slice(0, 200);
-    },
+  const busy = ref({} as Record<BusyKey, boolean>);
+  const logs = ref<string[]>([]);
+  const loading = computed(() => Object.values(busy.value).some(Boolean));
 
-    setBusy(key: BusyKey, value: boolean) {
-      this.busy[key] = value;
-      this.loading = Object.values(this.busy).some(Boolean);
+  const toolStatus = computed(() => tools.toolStatus);
+  const appConfig = computed(() => config.appConfig);
+  const devices = computed(() => devicesStore.devices);
+  const sessions = computed(() => sessionsStore.sessions);
+  const sessionLogs = computed(() => sessionsStore.sessionLogs);
+  const globalDraftOptions = computed({
+    get: () => config.globalDraftOptions,
+    set: (value: ScrcpyOptions) => {
+      config.globalDraftOptions = value;
     },
+  });
+  const globalDraftPresetId = computed({
+    get: () => config.globalDraftPresetId,
+    set: (value: PresetId) => {
+      config.globalDraftPresetId = value;
+    },
+  });
+  const deviceDraftOptions = computed(() => config.deviceDraftOptions);
+  const sessionDraftOptions = computed(() => sessionsStore.sessionDraftOptions);
 
-    async fetchAppConfig() {
-      this.setBusy('config', true);
-      try {
-        this.appConfig = await invoke<AppConfig>('get_app_config');
-        this.globalDraftOptions = { ...(this.appConfig.default_scrcpy_options ?? defaultScrcpyOptions) };
-        this.globalDraftPresetId = this.appConfig.default_preset_id ?? 'daily';
-      } catch (error) {
-        this.log(`读取配置失败: ${String(error)}`);
-      } finally {
-        this.setBusy('config', false);
-      }
-    },
+  const selectedDevice = computed(() => devicesStore.selectedDevice);
+  const isToolsReady = computed(() => tools.isToolsReady);
+  const availableDeviceCount = computed(() => devicesStore.availableDeviceCount);
+  const activeSession = (serial: string) => sessionsStore.activeSession(serial);
+  const deviceOptionEntry = (serial: string) => config.deviceOptionEntry(serial);
+  const effectiveOptions = (serial: string) => {
+    const globalOptions = config.appConfig?.default_scrcpy_options ?? defaultScrcpyOptions;
+    const deviceOptions = config.appConfig?.device_scrcpy_options[serial]?.options;
+    const sessionOptions = sessionsStore.sessionDraftOptions[serial];
+    return mergeScrcpyOptions(globalOptions, deviceOptions, sessionOptions);
+  };
 
-    async saveDefaultOptions(options: ScrcpyOptions, presetId: PresetId) {
-      this.setBusy('settings', true);
-      try {
-        this.appConfig = await invoke<AppConfig>('save_default_scrcpy_options', { options, presetId });
-        this.globalDraftOptions = { ...options };
-        this.globalDraftPresetId = presetId;
-        this.log('已保存全局默认参数');
-      } catch (error) {
-        this.log(`保存全局默认参数失败: ${String(error)}`);
-        throw error;
-      } finally {
-        this.setBusy('settings', false);
-      }
-    },
+  function log(message: string) {
+    const time = new Date().toLocaleTimeString();
+    logs.value.unshift(`[${time}] ${message}`);
+    logs.value = logs.value.slice(0, 200);
+  }
 
-    async saveDeviceOptions(serial: string, options: ScrcpyOptions, presetId: PresetId | null) {
-      this.setBusy('settings', true);
-      try {
-        this.appConfig = await invoke<AppConfig>('save_device_scrcpy_options', { serial, options, presetId });
-        delete this.sessionDraftOptions[serial];
-        this.log(`已保存设备参数: ${serial}`);
-      } catch (error) {
-        this.log(`保存设备参数失败: ${String(error)}`);
-        throw error;
-      } finally {
-        this.setBusy('settings', false);
-      }
-    },
+  function setBusy(key: BusyKey, value: boolean) {
+    busy.value[key] = value;
+  }
 
-    async clearDeviceOptions(serial: string) {
-      this.setBusy('settings', true);
-      try {
-        this.appConfig = await invoke<AppConfig>('clear_device_scrcpy_options', { serial });
-        delete this.deviceDraftOptions[serial];
-        delete this.sessionDraftOptions[serial];
-        this.log(`已恢复全局默认: ${serial}`);
-      } catch (error) {
-        this.log(`恢复全局默认失败: ${String(error)}`);
-        throw error;
-      } finally {
-        this.setBusy('settings', false);
-      }
-    },
+  async function fetchAppConfig() {
+    setBusy('config', true);
+    try {
+      await config.fetchAppConfig();
+    } catch (error) {
+      log(`读取配置失败: ${errorMessage(error)}`);
+    } finally {
+      setBusy('config', false);
+    }
+  }
 
-    async fetchToolStatus() {
-      this.setBusy('tools', true);
-      try {
-        this.toolStatus = await invoke<ToolStatus>('get_tool_status');
-      } catch (error) {
-        this.log(`工具检查失败: ${String(error)}`);
-      } finally {
-        this.setBusy('tools', false);
-      }
-    },
+  async function saveDefaultOptions(options: ScrcpyOptions, presetId: PresetId) {
+    setBusy('settings', true);
+    try {
+      await config.saveDefaultOptions(options, presetId);
+      log('已保存全局默认参数');
+    } catch (error) {
+      log(`保存全局默认参数失败: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      setBusy('settings', false);
+    }
+  }
 
-    async setToolPath(tool: 'adb' | 'scrcpy', path: string) {
-      this.setBusy('tools', true);
-      try {
-        const adbPath = tool === 'adb' ? path : (this.appConfig?.adb_path ?? this.toolStatus?.adb_path ?? null);
-        const scrcpyPath =
-          tool === 'scrcpy' ? path : (this.appConfig?.scrcpy_path ?? this.toolStatus?.scrcpy_path ?? null);
-        this.appConfig = await invoke<AppConfig>('set_tool_paths', { adbPath, scrcpyPath });
-        await this.fetchToolStatus();
-        this.log(`已更新 ${tool} 路径`);
-      } catch (error) {
-        this.log(`更新工具路径失败: ${String(error)}`);
-        throw error;
-      } finally {
-        this.setBusy('tools', false);
-      }
-    },
+  async function saveDeviceOptions(serial: string, options: ScrcpyOptions, presetId: PresetId | null) {
+    setBusy('settings', true);
+    try {
+      await config.saveDeviceOptions(serial, options, presetId);
+      delete sessionsStore.sessionDraftOptions[serial];
+      log(`已保存设备参数: ${serial}`);
+    } catch (error) {
+      log(`保存设备参数失败: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      setBusy('settings', false);
+    }
+  }
 
-    async installTools() {
-      this.setBusy('install', true);
-      try {
-        const result = await invoke<ToolInstallResult>('install_tools');
-        this.log(result.logs.join(' / '));
-        await this.fetchAppConfig();
-        await this.fetchToolStatus();
-        return result;
-      } catch (error) {
-        this.log(`自动安装失败: ${String(error)}`);
-        throw error;
-      } finally {
-        this.setBusy('install', false);
-      }
-    },
+  async function clearDeviceOptions(serial: string) {
+    setBusy('settings', true);
+    try {
+      await config.clearDeviceOptions(serial);
+      delete sessionsStore.sessionDraftOptions[serial];
+      log(`已恢复全局默认: ${serial}`);
+    } catch (error) {
+      log(`恢复全局默认失败: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      setBusy('settings', false);
+    }
+  }
 
-    async refreshDevices() {
-      this.setBusy('devices', true);
-      try {
-        this.devices = await invoke<Device[]>('list_devices');
-        if (!this.selectedSerial && this.devices.length > 0) {
-          this.selectedSerial = this.devices[0].serial;
-        }
-        if (this.selectedSerial && !this.devices.some((device) => device.serial === this.selectedSerial)) {
-          this.selectedSerial = this.devices[0]?.serial ?? null;
-        }
-      } catch (error) {
-        this.log(`刷新设备失败: ${String(error)}`);
-      } finally {
-        this.setBusy('devices', false);
-      }
-    },
+  async function fetchToolStatus() {
+    setBusy('tools', true);
+    try {
+      await tools.fetchToolStatus();
+    } catch (error) {
+      log(`工具检查失败: ${errorMessage(error)}`);
+    } finally {
+      setBusy('tools', false);
+    }
+  }
 
-    async refreshSessions() {
-      this.setBusy('sessions', true);
-      try {
-        this.sessions = await invoke<SessionInfo[]>('list_sessions');
-      } catch (error) {
-        this.log(`刷新会话失败: ${String(error)}`);
-      } finally {
-        this.setBusy('sessions', false);
-      }
-    },
+  async function setToolPath(tool: 'adb' | 'scrcpy', path: string) {
+    setBusy('tools', true);
+    try {
+      const adbPath = tool === 'adb' ? path : (config.appConfig?.adb_path ?? tools.toolStatus?.adb_path ?? null);
+      const scrcpyPath = tool === 'scrcpy' ? path : (config.appConfig?.scrcpy_path ?? tools.toolStatus?.scrcpy_path ?? null);
+      await config.setToolPaths(adbPath, scrcpyPath);
+      await fetchToolStatus();
+      log(`已更新 ${tool} 路径`);
+    } catch (error) {
+      log(`更新工具路径失败: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      setBusy('tools', false);
+    }
+  }
 
-    async startMirror(serial: string, options?: ScrcpyOptions) {
-      this.setBusy('start', true);
-      try {
-        const finalOptions = options ?? this.effectiveOptions(serial);
-        const info = await invoke<SessionInfo>('start_scrcpy', { serial, options: finalOptions });
-        await this.refreshSessions();
-        this.currentPage = 'sessions';
-        this.log(`已启动投屏: ${serial}`);
-        return info;
-      } catch (error) {
-        this.log(`启动失败: ${String(error)}`);
-        throw error;
-      } finally {
-        this.setBusy('start', false);
-      }
-    },
+  async function installTools() {
+    setBusy('install', true);
+    try {
+      const result = await tools.installTools();
+      log(result.logs.join(' / '));
+      await fetchAppConfig();
+      await fetchToolStatus();
+      return result;
+    } catch (error) {
+      log(`自动安装失败: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      setBusy('install', false);
+    }
+  }
 
-    async stopMirror(sessionId: string) {
-      this.setBusy('stop', true);
-      try {
-        await invoke('stop_scrcpy', { sessionId });
-        await this.refreshSessions();
-        this.log(`已停止投屏: ${sessionId}`);
-      } catch (error) {
-        this.log(`停止失败: ${String(error)}`);
-      } finally {
-        this.setBusy('stop', false);
-      }
-    },
+  async function refreshDevices() {
+    setBusy('devices', true);
+    try {
+      await devicesStore.refreshDevices();
+    } catch (error) {
+      log(`刷新设备失败: ${errorMessage(error)}`);
+    } finally {
+      setBusy('devices', false);
+    }
+  }
 
-    async stopAllSessions() {
-      this.setBusy('stop', true);
-      try {
-        this.sessions = await invoke<SessionInfo[]>('stop_all_sessions');
-        this.log('已停止全部投屏会话');
-      } catch (error) {
-        this.log(`停止全部失败: ${String(error)}`);
-      } finally {
-        this.setBusy('stop', false);
-      }
-    },
+  async function refreshSessions() {
+    setBusy('sessions', true);
+    try {
+      await sessionsStore.refreshSessions();
+    } catch (error) {
+      log(`刷新会话失败: ${errorMessage(error)}`);
+    } finally {
+      setBusy('sessions', false);
+    }
+  }
 
-    async saveDeviceAlias(serial: string, alias: string | null) {
-      try {
-        this.appConfig = await invoke<AppConfig>('save_device_alias', { serial, alias: alias ?? '' });
-        await this.refreshDevices();
-        this.log(`已更新设备别名: ${serial} -> ${alias || '恢复默认'}`);
-      } catch (error) {
-        this.log(`保存别名失败: ${String(error)}`);
-        throw error;
-      }
-    },
+  async function startMirror(serial: string, options?: ScrcpyOptions) {
+    setBusy('start', true);
+    try {
+      const finalOptions = options ?? effectiveOptions(serial);
+      const info = await sessionsStore.startMirror(serial, finalOptions);
+      ui.openPage('sessions');
+      log(`已启动投屏: ${serial}`);
+      return info;
+    } catch (error) {
+      log(`启动失败: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      setBusy('start', false);
+    }
+  }
 
-    async adbTcpip(serial: string, port?: number) {
-      this.setBusy('wireless', true);
-      try {
-        await invoke('adb_tcpip', { serial, port: port ?? null });
-        this.log(`设备 ${serial} 已切换到无线模式`);
-      } catch (error) {
-        this.log(`切换无线失败: ${String(error)}`);
-        throw error;
-      } finally {
-        this.setBusy('wireless', false);
-      }
-    },
+  async function stopMirror(sessionId: string) {
+    setBusy('stop', true);
+    try {
+      await sessionsStore.stopMirror(sessionId);
+      log(`已停止投屏: ${sessionId}`);
+    } catch (error) {
+      log(`停止失败: ${errorMessage(error)}`);
+    } finally {
+      setBusy('stop', false);
+    }
+  }
 
-    async adbConnect(endpoint: string) {
-      this.setBusy('wireless', true);
-      try {
-        await invoke('adb_connect', { endpoint });
-        this.log(`已连接无线设备: ${endpoint}`);
-        await this.fetchAppConfig();
-        await this.refreshDevices();
-      } catch (error) {
-        this.log(`无线连接失败: ${String(error)}`);
-        throw error;
-      } finally {
-        this.setBusy('wireless', false);
-      }
-    },
+  async function stopAllSessions() {
+    setBusy('stop', true);
+    try {
+      await sessionsStore.stopAllSessions();
+      log('已停止全部投屏会话');
+    } catch (error) {
+      log(`停止全部失败: ${errorMessage(error)}`);
+    } finally {
+      setBusy('stop', false);
+    }
+  }
 
-    async adbPair(request: PairRequest) {
-      this.setBusy('pair', true);
-      try {
-        await invoke('adb_pair', { request });
-        this.log(`配对并连接成功: ${request.host}`);
-        await this.fetchAppConfig();
-        await this.refreshDevices();
-      } catch (error) {
-        this.log(`配对失败: ${String(error)}`);
-        throw error;
-      } finally {
-        this.setBusy('pair', false);
-      }
-    },
+  async function saveDeviceAlias(serial: string, alias: string | null) {
+    try {
+      await config.saveDeviceAlias(serial, alias);
+      await refreshDevices();
+      log(`已更新设备别名: ${serial} -> ${alias || '恢复默认'}`);
+    } catch (error) {
+      log(`保存别名失败: ${errorMessage(error)}`);
+      throw error;
+    }
+  }
 
-    async fetchSessionLogs(sessionId: string) {
-      try {
-        const logs = await invoke<SessionLogLine[]>('get_session_logs', { sessionId });
-        this.sessionLogs[sessionId] = logs;
-      } catch (error) {
-        this.log(`读取会话日志失败: ${String(error)}`);
-      }
-    },
+  async function adbTcpip(serial: string, port?: number) {
+    setBusy('wireless', true);
+    try {
+      await invokeCommand('adb_tcpip', { serial, port: port ?? null });
+      log(`设备 ${serial} 已切换到无线模式`);
+    } catch (error) {
+      log(`切换无线失败: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      setBusy('wireless', false);
+    }
+  }
 
-    async openSessionLogs(sessionId: string) {
-      this.selectedLogSessionId = this.selectedLogSessionId === sessionId ? null : sessionId;
-      if (this.selectedLogSessionId) {
-        await this.fetchSessionLogs(sessionId);
-      }
-    },
-  },
+  async function adbConnect(endpoint: string) {
+    setBusy('wireless', true);
+    try {
+      await invokeCommand('adb_connect', { endpoint });
+      log(`已连接无线设备: ${endpoint}`);
+      await fetchAppConfig();
+      await refreshDevices();
+    } catch (error) {
+      log(`无线连接失败: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      setBusy('wireless', false);
+    }
+  }
+
+  async function adbPair(request: PairRequest) {
+    setBusy('pair', true);
+    try {
+      await invokeCommand('adb_pair', { request });
+      log(`配对并连接成功: ${request.host}`);
+      await fetchAppConfig();
+      await refreshDevices();
+    } catch (error) {
+      log(`配对失败: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      setBusy('pair', false);
+    }
+  }
+
+  async function fetchSessionLogs(sessionId: string) {
+    try {
+      await sessionsStore.fetchSessionLogs(sessionId);
+    } catch (error) {
+      log(`读取会话日志失败: ${errorMessage(error)}`);
+    }
+  }
+
+  async function openSessionLogs(sessionId: string) {
+    ui.toggleLogSession(sessionId);
+    if (ui.selectedLogSessionId) {
+      await fetchSessionLogs(sessionId);
+    }
+  }
+
+  async function listenSessionLogs() {
+    return await sessionsStore.listenSessionLogs();
+  }
+
+  return {
+    toolStatus,
+    appConfig,
+    devices,
+    sessions,
+    loading,
+    busy,
+    logs,
+    sessionLogs,
+    globalDraftOptions,
+    globalDraftPresetId,
+    deviceDraftOptions,
+    sessionDraftOptions,
+    selectedDevice,
+    isToolsReady,
+    availableDeviceCount,
+    activeSession,
+    deviceOptionEntry,
+    effectiveOptions,
+    log,
+    setBusy,
+    fetchAppConfig,
+    saveDefaultOptions,
+    saveDeviceOptions,
+    clearDeviceOptions,
+    fetchToolStatus,
+    setToolPath,
+    installTools,
+    refreshDevices,
+    refreshSessions,
+    startMirror,
+    stopMirror,
+    stopAllSessions,
+    saveDeviceAlias,
+    adbTcpip,
+    adbConnect,
+    adbPair,
+    fetchSessionLogs,
+    openSessionLogs,
+    listenSessionLogs,
+  };
 });
