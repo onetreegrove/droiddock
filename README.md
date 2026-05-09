@@ -66,6 +66,7 @@ npm run tauri:build:app
 ## 文档
 
 - [产品需求文档](docs/product-requirements.md)
+- [架构说明](docs/architecture.md)
 - [UI 设计稿说明](docs/ui-design.md)
 - [UI 静态设计稿](docs/ui-mockup.html)
 - [scrcpy 使用方式调研](docs/scrcpy-usage.md)

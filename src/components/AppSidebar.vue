@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { useAppStore } from '../stores/app';
+import { useUiStore } from '../stores/ui';
 
 const store = useAppStore();
+const ui = useUiStore();
 const runningCount = computed(() => store.sessions.filter((session) => session.status === 'running').length);
 </script>
 
@@ -25,7 +27,7 @@ const runningCount = computed(() => store.sessions.filter((session) => session.s
     </div>
     <div class="sidebar-divider"></div>
     <nav class="nav">
-      <button :class="['nav-item', { active: store.currentPage === 'dashboard' }]" @click="store.currentPage = 'dashboard'">
+      <button :class="['nav-item', { active: ui.currentPage === 'dashboard' }]" @click="ui.openPage('dashboard')">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M2 7.5L8 2l6 5.5V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5z" stroke="currentColor" stroke-width="1.3" />
@@ -34,7 +36,7 @@ const runningCount = computed(() => store.sessions.filter((session) => session.s
         </span>
         <span>首页</span>
       </button>
-      <button :class="['nav-item', { active: store.currentPage === 'devices' }]" @click="store.currentPage = 'devices'">
+      <button :class="['nav-item', { active: ui.currentPage === 'devices' }]" @click="ui.openPage('devices')">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <rect x="2" y="1" width="8" height="14" rx="1.5" stroke="currentColor" stroke-width="1.3" />
@@ -44,7 +46,7 @@ const runningCount = computed(() => store.sessions.filter((session) => session.s
         </span>
         <span>设备</span>
       </button>
-      <button :class="['nav-item', { active: store.currentPage === 'sessions' }]" @click="store.currentPage = 'sessions'">
+      <button :class="['nav-item', { active: ui.currentPage === 'sessions' }]" @click="ui.openPage('sessions')">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <rect x="1" y="3" width="14" height="9" rx="1.5" stroke="currentColor" stroke-width="1.3" />
@@ -54,7 +56,7 @@ const runningCount = computed(() => store.sessions.filter((session) => session.s
         <span>投屏会话</span>
         <span v-if="runningCount" class="nav-badge">{{ runningCount }}</span>
       </button>
-      <button :class="['nav-item', { active: store.currentPage === 'setup' }]" @click="store.currentPage = 'setup'">
+      <button :class="['nav-item', { active: ui.currentPage === 'setup' }]" @click="ui.openPage('setup')">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M8 2L9.5 5.5L13 6L10.5 8.5L11 12L8 10.5L5 12L5.5 8.5L3 6L6.5 5.5L8 2Z" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round" />
@@ -62,7 +64,7 @@ const runningCount = computed(() => store.sessions.filter((session) => session.s
         </span>
         <span>工具配置</span>
       </button>
-      <button :class="['nav-item', { active: store.currentPage === 'settings' }]" @click="store.currentPage = 'settings'">
+      <button :class="['nav-item', { active: ui.currentPage === 'settings' }]" @click="ui.openPage('settings')">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <circle cx="8" cy="8" r="2.2" stroke="currentColor" stroke-width="1.3" />

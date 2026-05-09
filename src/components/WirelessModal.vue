@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import { useAppStore } from '../stores/app';
+import { useUiStore } from '../stores/ui';
 import { buildConnectEndpoint, splitConnectEndpoint } from '../domain/wireless';
 
 const store = useAppStore();
+const ui = useUiStore();
 const selectedSerial = ref(store.devices.find((device) => device.connection === 'usb' && device.state === 'device')?.serial ?? '');
 const host = ref('');
 const port = ref('5555');
@@ -32,7 +34,7 @@ async function reconnect() {
   errorMessage.value = '';
   try {
     await store.adbConnect(buildConnectEndpoint(reconnectHost.value, reconnectPort.value));
-    store.modal = null;
+    ui.closeModal();
   } catch (error) {
     errorMessage.value = String(error instanceof Error ? error.message : error);
   }
@@ -44,7 +46,7 @@ async function submit() {
   try {
     await store.adbTcpip(selectedSerial.value, Number(port.value || 5555));
     await store.adbConnect(buildConnectEndpoint(host.value, port.value || '5555'));
-    store.modal = null;
+    ui.closeModal();
   } catch (error) {
     errorMessage.value = String(error instanceof Error ? error.message : error);
   }
@@ -52,11 +54,11 @@ async function submit() {
 </script>
 
 <template>
-  <div class="modal-overlay" @click.self="store.modal = null">
+  <div class="modal-overlay" @click.self="ui.closeModal()">
     <section class="modal-card">
       <header class="modal-header">
         <div><div class="modal-title">USB 转无线连接</div><div class="modal-subtitle">适用于 Android 10 及以下，或通过 USB 建立无线</div></div>
-        <button class="modal-close" aria-label="关闭" @click="store.modal = null">
+        <button class="modal-close" aria-label="关闭" @click="ui.closeModal()">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
             <path d="M2 2l8 8M10 2L2 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
           </svg>
@@ -100,7 +102,7 @@ async function submit() {
         <div v-if="errorMessage" class="modal-error">{{ errorMessage }}</div>
       </div>
       <footer class="modal-footer">
-        <button class="btn btn-ghost" @click="store.modal = null">取消</button>
+        <button class="btn btn-ghost" @click="ui.closeModal()">取消</button>
         <button class="btn btn-primary" :disabled="!selectedSerial || !host" @click="submit">连接</button>
       </footer>
     </section>

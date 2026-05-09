@@ -7,8 +7,10 @@ import { buildScrcpyCommand, presetLabels, presetOptions } from '../domain/scrcp
 import { deviceIpAddress } from '../domain/wireless';
 import type { PresetId, ScrcpyOptions } from '../types/app';
 import { useAppStore } from '../stores/app';
+import { useUiStore } from '../stores/ui';
 
 const store = useAppStore();
+const ui = useUiStore();
 const editorOptions = ref<ScrcpyOptions>({});
 const activePreset = ref<PresetId>('daily');
 const device = computed(() => store.selectedDevice);
@@ -25,7 +27,7 @@ const launchHint = computed(() => {
 });
 
 watch(
-  () => [store.selectedSerial, store.appConfig] as const,
+  () => [ui.selectedSerial, store.appConfig] as const,
   ([serial]) => {
     if (!serial) return;
     editorOptions.value = { ...store.effectiveOptions(serial) };

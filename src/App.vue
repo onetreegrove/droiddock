@@ -14,11 +14,14 @@ import ConfirmModal from './components/ConfirmModal.vue';
 import PairModal from './components/PairModal.vue';
 import WirelessModal from './components/WirelessModal.vue';
 import { useAppStore } from './stores/app';
+import { useUiStore } from './stores/ui';
 
 const store = useAppStore();
+const ui = useUiStore();
 const showExitConfirm = ref(false);
 let poller: number | undefined;
 let unlistenClose: UnlistenFn | undefined;
+let unlistenLogs: UnlistenFn | undefined;
 const devicesSubtitle = computed(() => `${store.devices.length} 台已发现 · ${store.availableDeviceCount} 台可用`);
 
 function hasTauriWindowMetadata() {
@@ -30,15 +33,11 @@ onMounted(async () => {
   await store.fetchToolStatus();
   await store.refreshDevices();
   await store.refreshSessions();
+  unlistenLogs = await store.listenSessionLogs();
 
   poller = window.setInterval(async () => {
     await store.refreshDevices();
     await store.refreshSessions();
-    for (const session of store.sessions) {
-      if (session.status === 'running') {
-        await store.fetchSessionLogs(session.session_id);
-      }
-    }
   }, 3000);
 
   if (!hasTauriWindowMetadata()) return;
@@ -60,6 +59,7 @@ async function handleExitConfirm() {
 onUnmounted(() => {
   if (poller) window.clearInterval(poller);
   unlistenClose?.();
+  unlistenLogs?.();
 });
 </script>
 
@@ -68,11 +68,11 @@ onUnmounted(() => {
     <AppSidebar />
     <section class="main">
       <Transition name="fade" mode="out-in">
-        <DashboardView v-if="store.currentPage === 'dashboard'" :key="'dashboard'" />
-        <div v-else-if="store.currentPage === 'devices'" class="page" :key="'devices'">
+        <DashboardView v-if="ui.currentPage === 'dashboard'" :key="'dashboard'" />
+        <div v-else-if="ui.currentPage === 'devices'" class="page" :key="'devices'">
           <AppHeader title="设备" :subtitle="devicesSubtitle">
             <template #actions>
-              <button class="btn btn-ghost" @click="store.modal = 'pair'">ADB Pair</button>
+              <button class="btn btn-ghost" @click="ui.openModal('pair')">ADB Pair</button>
               <button class="btn btn-ghost" :disabled="store.busy.devices" @click="store.refreshDevices">
                 <svg v-if="!store.busy.devices" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                   <path d="M10 5.5A4 4 0 1 1 6 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
@@ -87,8 +87,8 @@ onUnmounted(() => {
             <DeviceDetailPanel />
           </div>
         </div>
-        <SessionsView v-else-if="store.currentPage === 'sessions'" :key="'sessions'" />
-        <SetupView v-else-if="store.currentPage === 'setup'" :key="'setup'" />
+        <SessionsView v-else-if="ui.currentPage === 'sessions'" :key="'sessions'" />
+        <SetupView v-else-if="ui.currentPage === 'setup'" :key="'setup'" />
         <SettingsView v-else :key="'settings'" />
       </Transition>
     </section>
@@ -101,7 +101,7 @@ onUnmounted(() => {
       @confirm="handleExitConfirm"
       @cancel="showExitConfirm = false"
     />
-    <PairModal v-if="store.modal === 'pair'" />
-    <WirelessModal v-if="store.modal === 'wireless'" />
+    <PairModal v-if="ui.modal === 'pair'" />
+    <WirelessModal v-if="ui.modal === 'wireless'" />
   </main>
 </template>
