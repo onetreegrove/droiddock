@@ -16,6 +16,15 @@ const usbDevices = computed(() => store.devices.filter((device) => device.connec
 const recentEndpoints = computed(() => store.appConfig?.recent_endpoints ?? []);
 
 watch(
+  () => ui.wirelessReconnectEndpoint,
+  (endpoint) => {
+    if (!endpoint) return;
+    selectRecentEndpoint(endpoint);
+  },
+  { immediate: true },
+);
+
+watch(
   recentEndpoints,
   (endpoints) => {
     if (reconnectHost.value || reconnectPort.value || endpoints.length === 0) return;
@@ -33,7 +42,7 @@ function selectRecentEndpoint(endpoint: string) {
 async function reconnect() {
   errorMessage.value = '';
   try {
-    await store.adbConnect(buildConnectEndpoint(reconnectHost.value, reconnectPort.value));
+    await store.adbConnect(buildConnectEndpoint(reconnectHost.value, reconnectPort.value), ui.wirelessReconnectSource);
     ui.closeModal();
   } catch (error) {
     errorMessage.value = String(error instanceof Error ? error.message : error);
@@ -45,7 +54,7 @@ async function submit() {
   errorMessage.value = '';
   try {
     await store.adbTcpip(selectedSerial.value, Number(port.value || 5555));
-    await store.adbConnect(buildConnectEndpoint(host.value, port.value || '5555'));
+    await store.adbConnect(buildConnectEndpoint(host.value, port.value || '5555'), 'usb_tcpip');
     ui.closeModal();
   } catch (error) {
     errorMessage.value = String(error instanceof Error ? error.message : error);

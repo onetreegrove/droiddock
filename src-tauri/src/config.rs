@@ -4,6 +4,7 @@ use std::{collections::HashMap, fs, path::PathBuf};
 use crate::{now_secs, scrcpy::ScrcpyOptions};
 
 pub(crate) const CURRENT_CONFIG_SCHEMA_VERSION: u32 = 1;
+pub(crate) type DeviceRecords = HashMap<String, DeviceRecord>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
@@ -13,6 +14,7 @@ pub(crate) struct AppConfig {
     pub(crate) scrcpy_path: Option<String>,
     pub(crate) device_aliases: HashMap<String, String>,
     pub(crate) recent_endpoints: Vec<String>,
+    pub(crate) device_records: DeviceRecords,
     pub(crate) default_scrcpy_options: ScrcpyOptions,
     pub(crate) default_preset_id: String,
     pub(crate) device_scrcpy_options: HashMap<String, DeviceOptionEntry>,
@@ -26,11 +28,40 @@ impl Default for AppConfig {
             scrcpy_path: None,
             device_aliases: HashMap::new(),
             recent_endpoints: Vec::new(),
+            device_records: HashMap::new(),
             default_scrcpy_options: ScrcpyOptions::default(),
             default_preset_id: "daily".to_string(),
             device_scrcpy_options: HashMap::new(),
         }
     }
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum DeviceConnection {
+    Usb,
+    Wireless,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum WirelessSource {
+    AdbPair,
+    UsbTcpip,
+    Manual,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq)]
+pub(crate) struct DeviceRecord {
+    pub(crate) serial: String,
+    pub(crate) display_name: Option<String>,
+    pub(crate) model: Option<String>,
+    pub(crate) product: Option<String>,
+    pub(crate) connection: DeviceConnection,
+    pub(crate) wireless_source: Option<WirelessSource>,
+    pub(crate) endpoint: Option<String>,
+    pub(crate) last_seen_at: u64,
+    pub(crate) last_connected_at: Option<u64>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -97,6 +128,7 @@ mod tests {
         assert_eq!(restored.default_preset_id, "daily");
         assert_eq!(restored.schema_version, CURRENT_CONFIG_SCHEMA_VERSION);
         assert_eq!(restored.default_scrcpy_options.max_size, Some(1920));
+        assert!(restored.device_records.is_empty());
     }
 
     #[test]
@@ -105,5 +137,6 @@ mod tests {
         assert_eq!(restored.schema_version, CURRENT_CONFIG_SCHEMA_VERSION);
         assert_eq!(restored.default_preset_id, "daily");
         assert!(restored.device_aliases.is_empty());
+        assert!(restored.device_records.is_empty());
     }
 }

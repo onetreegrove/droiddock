@@ -1,6 +1,6 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
-import type { PresetId, ScrcpyOptions } from '../types/app';
+import type { PresetId, ScrcpyOptions, WirelessSource } from '../types/app';
 import type { PairRequest } from '../lib/ipc/types';
 import { defaultScrcpyOptions, mergeScrcpyOptions } from '../domain/scrcpyOptions';
 import type { AppErrorPayload } from '../lib/ipc/errors';
@@ -40,6 +40,7 @@ export const useAppStore = defineStore('app', () => {
   const busy = ref({} as Record<BusyKey, boolean>);
   const logs = ref<string[]>([]);
   const loading = computed(() => Object.values(busy.value).some(Boolean));
+  let refreshInFlight = false;
 
   const toolStatus = computed(() => tools.toolStatus);
   const appConfig = computed(() => config.appConfig);
@@ -200,6 +201,17 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  async function refreshRuntimeState() {
+    if (refreshInFlight) return;
+    refreshInFlight = true;
+    try {
+      await refreshDevices();
+      await refreshSessions();
+    } finally {
+      refreshInFlight = false;
+    }
+  }
+
   async function startMirror(serial: string, options?: ScrcpyOptions) {
     setBusy('start', true);
     try {
@@ -264,10 +276,10 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  async function adbConnect(endpoint: string) {
+  async function adbConnect(endpoint: string, source: WirelessSource = 'manual') {
     setBusy('wireless', true);
     try {
-      await invokeCommand('adb_connect', { endpoint });
+      await invokeCommand('adb_connect', { endpoint, source });
       log(`已连接无线设备: ${endpoint}`);
       await fetchAppConfig();
       await refreshDevices();
@@ -343,6 +355,7 @@ export const useAppStore = defineStore('app', () => {
     installTools,
     refreshDevices,
     refreshSessions,
+    refreshRuntimeState,
     startMirror,
     stopMirror,
     stopAllSessions,

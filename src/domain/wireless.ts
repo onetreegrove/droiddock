@@ -1,4 +1,5 @@
 import type { PairRequest } from '../types/app';
+import type { WirelessSource } from '../lib/ipc/types';
 
 type PairFormValues = {
   pairHost: string;
@@ -51,6 +52,12 @@ export function buildConnectEndpoint(host: string, port: string): string {
 
   const connectPort = parsePort(port, '连接端口', true);
   return `${trimmedHost}:${connectPort}`;
+}
+
+export function wirelessSourceLabel(source: WirelessSource | null): string {
+  if (source === 'adb_pair') return 'ADB Pair 无线';
+  if (source === 'usb_tcpip') return 'USB 转无线';
+  return '无线';
 }
 
 export function buildPairRequest(values: PairFormValues): PairRequest {

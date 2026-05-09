@@ -4,7 +4,7 @@ import CommandPreview from './CommandPreview.vue';
 import ParameterEditor from './ParameterEditor.vue';
 import StatusChip from './StatusChip.vue';
 import { buildScrcpyCommand, presetLabels, presetOptions } from '../domain/scrcpyOptions';
-import { deviceIpAddress } from '../domain/wireless';
+import { deviceIpAddress, wirelessSourceLabel } from '../domain/wireless';
 import type { PresetId, ScrcpyOptions } from '../types/app';
 import { useAppStore } from '../stores/app';
 import { useUiStore } from '../stores/ui';
@@ -17,13 +17,21 @@ const device = computed(() => store.selectedDevice);
 const hasDeviceOptions = computed(() => Boolean(device.value && store.deviceOptionEntry(device.value.serial)));
 const ipAddress = computed(() => (device.value ? deviceIpAddress(device.value.serial) : null));
 const command = computed(() => (device.value ? buildScrcpyCommand(device.value.serial, editorOptions.value) : 'scrcpy'));
-const canLaunch = computed(() => device.value?.state === 'device' && store.isToolsReady);
+const canLaunch = computed(() => device.value?.presence === 'online' && device.value?.state === 'device' && store.isToolsReady);
 const launchHint = computed(() => {
   if (!device.value) return '请选择设备';
   if (!store.isToolsReady) return '请先完成工具配置';
+  if (device.value.presence === 'offline') {
+    return device.value.connection === 'wireless' ? '设备当前不在线，请先重连无线调试' : '设备当前不在线，插入 USB 后会自动刷新';
+  }
   if (device.value.state === 'unauthorized') return '请先在手机上允许 USB 调试授权';
   if (device.value.state === 'offline') return '设备已离线，请重新连接';
   return '';
+});
+const connectionLabel = computed(() => {
+  if (!device.value) return '-';
+  if (device.value.connection === 'usb') return 'USB';
+  return wirelessSourceLabel(device.value.wireless_source);
 });
 
 watch(
@@ -79,7 +87,7 @@ async function handleEditAlias() {
         </div>
         <div class="device-hero-info">
           <div class="hero-title-row">
-            <div class="hero-title">{{ device.alias || device.model || '未知设备' }}</div>
+            <div class="hero-title">{{ device.alias || device.display_name || device.model || '未知设备' }}</div>
             <button class="btn-icon-sm" title="编辑别名" @click="handleEditAlias">
               <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
                 <path d="M2.5 11.5v-2l6-6 2 2-6 6h-2zM9.5 2.5l2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
@@ -89,12 +97,15 @@ async function handleEditAlias() {
           <div class="hero-chips">
             <StatusChip
               :tone="device.state === 'device' ? 'green' : device.state === 'unauthorized' ? 'yellow' : 'red'"
-              :label="device.state === 'device' ? '可用' : device.state === 'unauthorized' ? '待授权' : '离线'"
+              :label="device.presence === 'offline' ? '离线' : device.state === 'device' ? '可用' : device.state === 'unauthorized' ? '待授权' : '离线'"
               dot
             />
-            <StatusChip tone="gray" :label="device.connection === 'usb' ? 'USB' : '无线'" />
+            <StatusChip tone="gray" :label="connectionLabel" />
           </div>
         </div>
+      </div>
+      <div v-if="device.presence === 'offline'" class="device-warning">
+        {{ device.connection === 'wireless' ? '设备当前不在线，可先重连无线调试。' : '设备当前不在线，插入 USB 后会自动刷新。' }}
       </div>
       <div class="metadata-grid">
         <span>Serial</span><span class="mono">{{ device.serial }}</span>

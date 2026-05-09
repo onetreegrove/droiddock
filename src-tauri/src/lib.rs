@@ -9,8 +9,7 @@ mod tools;
 mod wireless;
 
 use command::CommandResult;
-use config::{load_config, save_config_atomic, AppConfig, DeviceOptionEntry};
-use devices::Device;
+use config::{load_config, save_config_atomic, AppConfig, DeviceOptionEntry, WirelessSource};
 use scrcpy::{build_scrcpy_args, ScrcpyOptions};
 use sessions::{SessionInfo, SessionLogLine, SessionManager};
 use std::{
@@ -48,6 +47,16 @@ fn with_adb<T>(
         .clone();
     let adb = resolve_tool("adb", &config).ok_or_else(|| "adb not found".to_string())?;
     action(adb, config)
+}
+
+fn save_state_config(state: &State<'_, AppState>, config: AppConfig) -> Result<(), String> {
+    save_config_atomic(&config)?;
+    let mut state_config = state
+        .config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_string())?;
+    *state_config = config;
+    Ok(())
 }
 
 #[tauri::command]
@@ -193,10 +202,18 @@ fn install_tools(state: State<'_, AppState>) -> Result<ToolInstallResult, String
 }
 
 #[tauri::command]
-fn list_devices(state: State<'_, AppState>) -> Result<Vec<Device>, String> {
-    with_adb(&state, |adb, config| {
-        devices::list_devices_with_adb(&adb, &config)
-    })
+fn list_devices(state: State<'_, AppState>) -> Result<Vec<devices::ManagedDevice>, String> {
+    let mut config = state
+        .config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_string())?
+        .clone();
+    let adb = resolve_tool("adb", &config).ok_or_else(|| "adb not found".to_string())?;
+    let result = devices::list_devices_with_adb(&adb, &mut config, now_secs())?;
+    if result.changed {
+        save_state_config(&state, config)?;
+    }
+    Ok(result.devices)
 }
 
 #[tauri::command]
@@ -211,18 +228,25 @@ fn adb_tcpip(
 }
 
 #[tauri::command]
-fn adb_connect(state: State<'_, AppState>, endpoint: String) -> Result<CommandResult, String> {
+fn adb_connect(
+    state: State<'_, AppState>,
+    endpoint: String,
+    source: Option<WirelessSource>,
+) -> Result<CommandResult, String> {
     let mut config = state
         .config
         .lock()
         .map_err(|_| "config lock poisoned".to_string())?
         .clone();
     let adb = resolve_tool("adb", &config).ok_or_else(|| "adb not found".to_string())?;
-    let result = wireless::adb_connect_with_adb(&adb, &mut config, endpoint)?;
-    save_config_atomic(&config)?;
-    if let Ok(mut state_config) = state.config.lock() {
-        *state_config = config;
-    }
+    let result = wireless::adb_connect_with_adb(
+        &adb,
+        &mut config,
+        endpoint,
+        source.unwrap_or(WirelessSource::Manual),
+        now_secs(),
+    )?;
+    save_state_config(&state, config)?;
     Ok(result)
 }
 
@@ -244,11 +268,8 @@ fn adb_pair(state: State<'_, AppState>, request: PairRequest) -> Result<CommandR
         .map_err(|_| "config lock poisoned".to_string())?
         .clone();
     let adb = resolve_tool("adb", &config).ok_or_else(|| "adb not found".to_string())?;
-    let result = wireless::adb_pair_with_adb(&adb, &mut config, request)?;
-    save_config_atomic(&config)?;
-    if let Ok(mut state_config) = state.config.lock() {
-        *state_config = config;
-    }
+    let result = wireless::adb_pair_with_adb(&adb, &mut config, request, now_secs())?;
+    save_state_config(&state, config)?;
     Ok(result)
 }
 

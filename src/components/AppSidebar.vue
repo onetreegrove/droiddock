@@ -27,15 +27,6 @@ const runningCount = computed(() => store.sessions.filter((session) => session.s
     </div>
     <div class="sidebar-divider"></div>
     <nav class="nav">
-      <button :class="['nav-item', { active: ui.currentPage === 'dashboard' }]" @click="ui.openPage('dashboard')">
-        <span class="nav-icon">
-          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-            <path d="M2 7.5L8 2l6 5.5V14a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1V7.5z" stroke="currentColor" stroke-width="1.3" />
-            <path d="M6 15V9h4v6" stroke="currentColor" stroke-width="1.3" />
-          </svg>
-        </span>
-        <span>首页</span>
-      </button>
       <button :class="['nav-item', { active: ui.currentPage === 'devices' }]" @click="ui.openPage('devices')">
         <span class="nav-icon">
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">

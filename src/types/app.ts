@@ -1,4 +1,4 @@
-export type PageKey = 'dashboard' | 'devices' | 'sessions' | 'setup' | 'settings';
+export type PageKey = 'devices' | 'sessions' | 'setup' | 'settings';
 
 export type ModalKey = null | 'pair' | 'wireless' | 'logs';
 
@@ -21,10 +21,13 @@ export type PresetId = 'daily' | 'lowBandwidth' | 'demo' | 'batterySaver' | 'vie
 export type {
   AppConfig,
   Device,
+  DeviceRecord,
+  ManagedDevice,
   DeviceOptionEntry,
   PairRequest,
   SessionInfo,
   SessionLogLine,
   ToolInstallResult,
   ToolStatus,
+  WirelessSource,
 } from '../lib/ipc/types';

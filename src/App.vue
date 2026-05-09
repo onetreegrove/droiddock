@@ -4,7 +4,6 @@ import type { UnlistenFn } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import AppSidebar from './components/AppSidebar.vue';
 import AppHeader from './components/AppHeader.vue';
-import DashboardView from './components/DashboardView.vue';
 import DeviceList from './components/DeviceList.vue';
 import DeviceDetailPanel from './components/DeviceDetailPanel.vue';
 import SessionsView from './components/SessionsView.vue';
@@ -31,13 +30,14 @@ function hasTauriWindowMetadata() {
 onMounted(async () => {
   await store.fetchAppConfig();
   await store.fetchToolStatus();
-  await store.refreshDevices();
-  await store.refreshSessions();
+  if (!store.isToolsReady) {
+    ui.openPage('setup');
+  }
+  await store.refreshRuntimeState();
   unlistenLogs = await store.listenSessionLogs();
 
-  poller = window.setInterval(async () => {
-    await store.refreshDevices();
-    await store.refreshSessions();
+  poller = window.setInterval(() => {
+    void store.refreshRuntimeState();
   }, 3000);
 
   if (!hasTauriWindowMetadata()) return;
@@ -68,12 +68,12 @@ onUnmounted(() => {
     <AppSidebar />
     <section class="main">
       <Transition name="fade" mode="out-in">
-        <DashboardView v-if="ui.currentPage === 'dashboard'" :key="'dashboard'" />
-        <div v-else-if="ui.currentPage === 'devices'" class="page" :key="'devices'">
+        <div v-if="ui.currentPage === 'devices'" class="page" :key="'devices'">
           <AppHeader title="设备" :subtitle="devicesSubtitle">
             <template #actions>
+              <button class="btn btn-ghost" @click="ui.openModal('wireless')">USB 转无线</button>
               <button class="btn btn-ghost" @click="ui.openModal('pair')">ADB Pair</button>
-              <button class="btn btn-ghost" :disabled="store.busy.devices" @click="store.refreshDevices">
+              <button class="btn btn-ghost" :disabled="store.busy.devices" @click="store.refreshRuntimeState">
                 <svg v-if="!store.busy.devices" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
                   <path d="M10 5.5A4 4 0 1 1 6 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
                   <path d="M7.5 2h-1.5v1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />

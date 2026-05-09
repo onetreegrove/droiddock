@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crate::{
     command::{run_command_with_input_timeout, run_command_with_timeout, CommandResult},
-    config::AppConfig,
+    config::{AppConfig, DeviceConnection, DeviceRecord, WirelessSource},
 };
 
 const DEFAULT_TCPIP_PORT: u16 = 5555;
@@ -21,6 +21,32 @@ pub(crate) fn remember_endpoint(config: &mut AppConfig, endpoint: String) {
     config.recent_endpoints.retain(|item| item != &endpoint);
     config.recent_endpoints.insert(0, endpoint);
     config.recent_endpoints.truncate(20);
+}
+
+pub(crate) fn remember_wireless_device(
+    config: &mut AppConfig,
+    endpoint: String,
+    source: WirelessSource,
+    now: u64,
+) {
+    let existing = config.device_records.get(&endpoint).cloned();
+    config.device_records.insert(
+        endpoint.clone(),
+        DeviceRecord {
+            serial: endpoint.clone(),
+            display_name: existing
+                .as_ref()
+                .and_then(|record| record.display_name.clone())
+                .or_else(|| Some(endpoint.clone())),
+            model: existing.as_ref().and_then(|record| record.model.clone()),
+            product: existing.as_ref().and_then(|record| record.product.clone()),
+            connection: DeviceConnection::Wireless,
+            wireless_source: Some(source),
+            endpoint: Some(endpoint),
+            last_seen_at: now,
+            last_connected_at: Some(now),
+        },
+    );
 }
 
 pub(crate) fn adb_tcpip_with_adb(
@@ -41,6 +67,8 @@ pub(crate) fn adb_connect_with_adb(
     adb: &str,
     config: &mut AppConfig,
     endpoint: String,
+    source: WirelessSource,
+    now: u64,
 ) -> Result<CommandResult, String> {
     let endpoint = endpoint.trim().to_string();
     if endpoint.is_empty() {
@@ -49,7 +77,8 @@ pub(crate) fn adb_connect_with_adb(
 
     let result = run_command_with_timeout(adb, &["connect", &endpoint], Duration::from_secs(15));
     if result.ok {
-        remember_endpoint(config, endpoint);
+        remember_endpoint(config, endpoint.clone());
+        remember_wireless_device(config, endpoint, source, now);
         Ok(result)
     } else {
         Err(result.message)
@@ -72,6 +101,7 @@ pub(crate) fn adb_pair_with_adb(
     adb: &str,
     config: &mut AppConfig,
     request: PairRequest,
+    now: u64,
 ) -> Result<CommandResult, String> {
     let endpoint = format!("{}:{}", request.host.trim(), request.pair_port);
     let pair_result = run_command_with_input_timeout(
@@ -102,7 +132,8 @@ pub(crate) fn adb_pair_with_adb(
             return Err(connect_result.message);
         }
 
-        remember_endpoint(config, connect_endpoint);
+        remember_endpoint(config, connect_endpoint.clone());
+        remember_wireless_device(config, connect_endpoint, WirelessSource::AdbPair, now);
 
         Ok(CommandResult {
             ok: true,
@@ -132,5 +163,21 @@ mod tests {
         remember_endpoint(&mut config, "192.168.1.10:5555".to_string());
         assert_eq!(config.recent_endpoints[0], "192.168.1.10:5555");
         assert_eq!(config.recent_endpoints.len(), 20);
+    }
+
+    #[test]
+    fn remember_wireless_record_updates_endpoint_and_source() {
+        let mut config = AppConfig::default();
+        remember_wireless_device(
+            &mut config,
+            "192.168.1.10:41235".to_string(),
+            WirelessSource::AdbPair,
+            200,
+        );
+
+        let record = config.device_records.get("192.168.1.10:41235").unwrap();
+        assert_eq!(record.endpoint.as_deref(), Some("192.168.1.10:41235"));
+        assert_eq!(record.wireless_source, Some(WirelessSource::AdbPair));
+        assert_eq!(record.last_connected_at, Some(200));
     }
 }

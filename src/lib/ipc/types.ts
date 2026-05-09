@@ -17,14 +17,37 @@ export type ToolInstallResult = {
   logs: string[];
 };
 
+export type DeviceConnection = 'usb' | 'wireless';
+export type DevicePresence = 'online' | 'offline';
+export type WirelessSource = 'adb_pair' | 'usb_tcpip' | 'manual';
+
 export type Device = {
   serial: string;
   state: string;
   model: string | null;
   product: string | null;
-  connection: 'usb' | 'wireless';
+  connection: DeviceConnection;
   alias: string | null;
   raw: string;
+};
+
+export type DeviceRecord = {
+  serial: string;
+  display_name: string | null;
+  model: string | null;
+  product: string | null;
+  connection: DeviceConnection;
+  wireless_source: WirelessSource | null;
+  endpoint: string | null;
+  last_seen_at: number;
+  last_connected_at: number | null;
+};
+
+export type ManagedDevice = DeviceRecord & {
+  state: string;
+  presence: DevicePresence;
+  alias: string | null;
+  raw: string | null;
 };
 
 export type SessionLogLine = {
@@ -57,6 +80,7 @@ export type AppConfig = {
   scrcpy_path: string | null;
   device_aliases: Record<string, string>;
   recent_endpoints: string[];
+  device_records: Record<string, DeviceRecord>;
   default_scrcpy_options: ScrcpyOptions;
   default_preset_id: PresetId;
   device_scrcpy_options: Record<string, DeviceOptionEntry>;

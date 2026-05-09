@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { buildConnectEndpoint, buildPairRequest, deviceIpAddress, splitConnectEndpoint } from './wireless';
+import {
+  buildConnectEndpoint,
+  buildPairRequest,
+  deviceIpAddress,
+  splitConnectEndpoint,
+  wirelessSourceLabel,
+} from './wireless';
 
 describe('wireless device helpers', () => {
   it('extracts IP address from a wireless adb serial', () => {
@@ -59,5 +65,12 @@ describe('wireless device helpers', () => {
     });
 
     expect(buildConnectEndpoint('192.168.1.105', '41235')).toBe('192.168.1.105:41235');
+  });
+
+  it('labels wireless sources for device history', () => {
+    expect(wirelessSourceLabel('adb_pair')).toBe('ADB Pair 无线');
+    expect(wirelessSourceLabel('usb_tcpip')).toBe('USB 转无线');
+    expect(wirelessSourceLabel('manual')).toBe('无线');
+    expect(wirelessSourceLabel(null)).toBe('无线');
   });
 });
