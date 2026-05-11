@@ -7,8 +7,10 @@ export const useUiStore = defineStore('ui', {
     selectedSerial: null as string | null,
     modal: null as ModalKey,
     selectedLogSessionId: null as string | null,
-    wirelessReconnectEndpoint: null as string | null,
-    wirelessReconnectSource: 'manual' as WirelessSource,
+    reconnectDeviceSerial: null as string | null,
+    reconnectEndpoint: null as string | null,
+    reconnectSource: 'manual' as WirelessSource,
+    reconnectLaunchAfterConnect: false,
   }),
   actions: {
     openPage(page: PageKey) {
@@ -17,15 +19,19 @@ export const useUiStore = defineStore('ui', {
     openModal(modal: Exclude<ModalKey, null>) {
       this.modal = modal;
     },
-    openWirelessReconnect(endpoint: string, source: WirelessSource) {
-      this.wirelessReconnectEndpoint = endpoint;
-      this.wirelessReconnectSource = source;
-      this.modal = 'wireless';
+    openReconnectModal(serial: string, endpoint: string, source: WirelessSource | null = 'manual', launchAfterConnect = false) {
+      this.reconnectDeviceSerial = serial;
+      this.reconnectEndpoint = endpoint;
+      this.reconnectSource = source || 'manual';
+      this.reconnectLaunchAfterConnect = launchAfterConnect;
+      this.modal = 'reconnect';
     },
     closeModal() {
       this.modal = null;
-      this.wirelessReconnectEndpoint = null;
-      this.wirelessReconnectSource = 'manual';
+      this.reconnectDeviceSerial = null;
+      this.reconnectEndpoint = null;
+      this.reconnectSource = 'manual';
+      this.reconnectLaunchAfterConnect = false;
     },
     toggleLogSession(sessionId: string) {
       this.selectedLogSessionId = this.selectedLogSessionId === sessionId ? null : sessionId;

@@ -96,7 +96,7 @@ async function confirmForgetDevice() {
           <button
             v-if="device.connection === 'wireless' && device.endpoint"
             class="btn btn-ghost compact-button"
-            @click.stop="ui.openWirelessReconnect(device.endpoint, device.wireless_source || 'manual')"
+            @click.stop="ui.openReconnectModal(device.serial, device.endpoint, device.wireless_source)"
           >
             重连
           </button>

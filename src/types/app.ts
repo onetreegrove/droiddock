@@ -1,6 +1,6 @@
 export type PageKey = 'devices' | 'sessions' | 'setup' | 'settings';
 
-export type ModalKey = null | 'pair' | 'wireless' | 'logs';
+export type ModalKey = null | 'pair' | 'wireless' | 'reconnect' | 'logs';
 
 export type ScrcpyOptions = {
   maxSize?: number;

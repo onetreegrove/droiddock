@@ -233,7 +233,7 @@ body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#1113
 <!-- DEVICES PAGE -->
 <div class="page active" id="page-devices">
   <div class="vh">
-    <div><div class="vtitle">设备</div><div class="vsub">3 台已发现 · 2 台可用</div></div>
+    <div><div class="vtitle">设备</div><div class="vsub">3 台已发现 · 1 台可用</div></div>
     <div class="hact">
       <button class="btn btn-g" onclick="showWiz('pair')">ADB Pair</button>
       <button class="btn btn-g">
@@ -256,9 +256,14 @@ body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#1113
         <div class="dct">
           <div class="dic"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3.5" y="1.5" width="9" height="13" rx="1.5" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="12" r=".8" fill="currentColor"/></svg></div>
           <div class="dinfo"><div class="dname">谷歌 Pixel</div><div class="txs mono" style="color:var(--t3)">Pixel 8 Pro</div></div>
-          <div class="dchips"><span class="chip g"><span class="dot g"></span>可用</span><span class="chip gr">无线</span></div>
+          <div class="dchips"><span class="chip gr"><span class="dot gr"></span>离线</span><span class="chip gr">无线</span></div>
         </div>
         <div class="dserial mono">192.168.1.105:5555</div>
+        <div class="dwarn">
+          <svg width="11" height="11" viewBox="0 0 11 11" fill="none"><path d="M5.5 1L10 9.5H1L5.5 1Z" stroke="var(--yellow)" stroke-width="1.1" stroke-linejoin="round"/><path d="M5.5 4.5v2M5.5 7.5v.4" stroke="var(--yellow)" stroke-width="1.1" stroke-linecap="round"/></svg>
+          可重连，端口可修改
+          <button class="btn btn-g" onclick="event.stopPropagation();showWiz('reconnect')" style="padding:4px 8px;font-size:11px">重连</button>
+        </div>
       </div>
       <div class="dc" id="dev2" onclick="selDev(2)">
         <div class="dct">
@@ -364,7 +369,7 @@ body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#1113
       <div class="lbar">
         <button class="btn btn-p launch-btn" id="launch-btn" onclick="doLaunch()">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M3 2L11 6.5L3 11V2Z" fill="currentColor"/></svg>
-          启动投屏
+          <span id="launch-label">启动投屏</span>
         </button>
         <span id="launch-hint" class="tsm" style="color:var(--t3)"></span>
       </div>
@@ -587,6 +592,33 @@ body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#1113
       <button class="btn btn-p">连接</button>
     </div>
   </div>
+
+  <div class="wiz" id="wiz-reconnect" style="display:none">
+    <div class="wizh">
+      <div class="wiztitle">重连无线设备</div>
+      <div class="wizsub">修改当前设备的无线调试地址后重新连接</div>
+      <button class="wizclose" onclick="closeWiz()"><svg width="12" height="12" viewBox="0 0 12 12" fill="none"><path d="M2 2l8 8M10 2L2 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"/></svg></button>
+    </div>
+    <div class="wizb">
+      <div class="wizstep-title">当前设备</div>
+      <div style="display:grid;grid-template-columns:1fr auto;gap:8px 12px;align-items:center;padding:12px;border:1px solid var(--border1);border-radius:8px;background:var(--bg4);margin-bottom:14px">
+        <div style="font-weight:600;font-size:13px">谷歌 Pixel</div>
+        <span class="chip gr">ADB Pair 无线</span>
+        <div class="mono txs" style="color:var(--t3);grid-column:1/-1">192.168.1.105:5555</div>
+      </div>
+      <div class="wizstep-title">连接地址</div>
+      <div class="wiz-note">手机重启或无线调试重新开启后，连接端口可能变化，请以手机“无线调试”页面显示的 IP 和端口为准。</div>
+      <div style="display:grid;grid-template-columns:1fr 100px;gap:8px">
+        <div class="form-g"><div class="form-l">设备 IP</div><input class="wiz-input" value="192.168.1.105" /></div>
+        <div class="form-g"><div class="form-l">连接端口</div><input class="wiz-input" value="5555" /></div>
+      </div>
+    </div>
+    <div class="wizf">
+      <div style="flex:1"></div>
+      <button class="btn btn-g" onclick="closeWiz()">取消</button>
+      <button class="btn btn-p" id="reconnect-submit">重连</button>
+    </div>
+  </div>
 </div>
 
 </div><!-- /shell -->
@@ -596,7 +628,7 @@ body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#1113
 var activeToggles = {audio:true,awake:true};
 var devData = [
   {name:'我的三星',model:'Samsung Galaxy S24',serial:'R9YT301WXXX',state:'device',conn:'USB',ip:'—',chipCls:'g',chipTxt:'可用'},
-  {name:'谷歌 Pixel',model:'Pixel 8 Pro',serial:'192.168.1.105:5555',state:'device',conn:'无线',ip:'192.168.1.105',chipCls:'g',chipTxt:'可用'},
+  {name:'谷歌 Pixel',model:'Pixel 8 Pro',serial:'192.168.1.105:5555',state:'offline',conn:'无线',ip:'192.168.1.105',chipCls:'gr',chipTxt:'离线'},
   {name:'Xiaomi 14',model:'Xiaomi 14',serial:'A1B2C3D4EEE',state:'unauthorized',conn:'USB',ip:'—',chipCls:'y',chipTxt:'待授权'}
 ];
 var selIdx = 0;
@@ -620,9 +652,13 @@ function selDev(i) {
   var chips = document.getElementById('dd-chips');
   chips.innerHTML = '<span class="chip '+d.chipCls+'"><span class="dot '+d.chipCls+'"></span>'+d.chipTxt+'</span><span class="chip gr">'+d.conn+'</span>';
   var lb = document.getElementById('launch-btn');
+  var ll = document.getElementById('launch-label');
   var lh = document.getElementById('launch-hint');
+  ll.textContent = d.state === 'offline' && d.conn === '无线' ? '重连投屏' : '启动投屏';
   if(d.state === 'device') { lb.disabled = false; lh.textContent = ''; }
   else if(d.state === 'unauthorized') { lb.disabled = true; lh.textContent = '请先在手机上允许 USB 调试授权'; }
+  else if(d.state === 'offline' && d.conn === '无线') { lb.disabled = false; lh.textContent = '确认无线调试地址后重连并启动投屏'; }
+  else if(d.state === 'offline') { lb.disabled = true; lh.textContent = '设备当前不在线，请先重连无线调试'; }
   updateCmd();
 }
 
@@ -652,6 +688,10 @@ function updateCmd() {
 
 function doLaunch() {
   var d = devData[selIdx];
+  if(d.state === 'offline' && d.conn === '无线') {
+    showWiz('reconnect-launch');
+    return;
+  }
   if(d.state !== 'device') return;
   setPage('sessions');
 }
@@ -660,6 +700,8 @@ function showWiz(type) {
   document.getElementById('wiz-overlay').style.display = 'flex';
   document.getElementById('wiz-pair').style.display = type === 'pair' ? 'flex' : 'none';
   document.getElementById('wiz-wireless').style.display = type === 'wireless' ? 'flex' : 'none';
+  document.getElementById('wiz-reconnect').style.display = type === 'reconnect' || type === 'reconnect-launch' ? 'flex' : 'none';
+  document.getElementById('reconnect-submit').textContent = type === 'reconnect-launch' ? '重连并投屏' : '重连';
 }
 function closeWiz() { document.getElementById('wiz-overlay').style.display = 'none'; }
 function closeWizOnBg(e) { if(e.target.id === 'wiz-overlay') closeWiz(); }

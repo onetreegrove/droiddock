@@ -17,12 +17,19 @@ const device = computed(() => store.selectedDevice);
 const hasDeviceOptions = computed(() => Boolean(device.value && store.deviceOptionEntry(device.value.serial)));
 const ipAddress = computed(() => (device.value ? deviceIpAddress(device.value.serial) : null));
 const command = computed(() => (device.value ? buildScrcpyCommand(device.value.serial, editorOptions.value) : 'scrcpy'));
-const canLaunch = computed(() => device.value?.presence === 'online' && device.value?.state === 'device' && store.isToolsReady);
+const canReconnectAndLaunch = computed(
+  () => Boolean(device.value?.connection === 'wireless' && device.value?.presence === 'offline' && device.value?.endpoint && store.isToolsReady),
+);
+const canLaunch = computed(
+  () => Boolean(device.value?.presence === 'online' && device.value?.state === 'device' && store.isToolsReady) || canReconnectAndLaunch.value,
+);
+const launchButtonText = computed(() => (canReconnectAndLaunch.value ? '重连投屏' : '启动投屏'));
 const launchHint = computed(() => {
   if (!device.value) return '请选择设备';
   if (!store.isToolsReady) return '请先完成工具配置';
   if (device.value.presence === 'offline') {
-    return device.value.connection === 'wireless' ? '设备当前不在线，请先重连无线调试' : '设备当前不在线，插入 USB 后会自动刷新';
+    if (canReconnectAndLaunch.value) return '确认无线调试地址后重连并启动投屏';
+    return device.value.connection === 'wireless' ? '缺少无线连接地址，请重新配对或通过 USB 转无线' : '设备当前不在线，插入 USB 后会自动刷新';
   }
   if (device.value.state === 'unauthorized') return '请先在手机上允许 USB 调试授权';
   if (device.value.state === 'offline') return '设备已离线，请重新连接';
@@ -62,6 +69,10 @@ async function resetToGlobal() {
 
 async function launch() {
   if (!device.value) return;
+  if (canReconnectAndLaunch.value && device.value.endpoint) {
+    ui.openReconnectModal(device.value.serial, device.value.endpoint, device.value.wireless_source, true);
+    return;
+  }
   store.sessionDraftOptions[device.value.serial] = { ...editorOptions.value };
   await store.startMirror(device.value.serial, editorOptions.value);
 }
@@ -106,6 +117,13 @@ async function handleEditAlias() {
       </div>
       <div v-if="device.presence === 'offline'" class="device-warning">
         {{ device.connection === 'wireless' ? '设备当前不在线，可先重连无线调试。' : '设备当前不在线，插入 USB 后会自动刷新。' }}
+        <button
+          v-if="device.connection === 'wireless' && device.endpoint"
+          class="btn btn-ghost compact-button"
+          @click.stop="ui.openReconnectModal(device.serial, device.endpoint, device.wireless_source)"
+        >
+          重连
+        </button>
       </div>
       <div class="metadata-grid">
         <span>Serial</span><span class="mono">{{ device.serial }}</span>
@@ -131,11 +149,11 @@ async function handleEditAlias() {
       <CommandPreview :command="command" />
     </section>
     <footer class="launch-bar" :class="{ disabled: !canLaunch }">
-      <button class="btn btn-primary launch-button" :disabled="!canLaunch" :title="launchHint || '启动投屏'" @click="launch">
+      <button class="btn btn-primary launch-button" :disabled="!canLaunch" :title="launchHint || launchButtonText" @click="launch">
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
           <path d="M3 2L11 6.5L3 11V2Z" fill="currentColor" />
         </svg>
-        启动投屏
+        {{ launchButtonText }}
       </button>
     </footer>
   </section>

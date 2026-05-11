@@ -1,57 +1,16 @@
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { useAppStore } from '../stores/app';
 import { useUiStore } from '../stores/ui';
-import { buildConnectEndpoint, splitConnectEndpoint } from '../domain/wireless';
+import { buildConnectEndpoint } from '../domain/wireless';
 
 const store = useAppStore();
 const ui = useUiStore();
 const selectedSerial = ref(store.devices.find((device) => device.connection === 'usb' && device.state === 'device')?.serial ?? '');
 const host = ref('');
 const port = ref('5555');
-const reconnectHost = ref('');
-const reconnectPort = ref('');
 const errorMessage = ref('');
 const usbDevices = computed(() => store.devices.filter((device) => device.connection === 'usb' && device.state === 'device'));
-const recentEndpoints = computed(() => store.appConfig?.recent_endpoints ?? []);
-
-watch(
-  () => ui.wirelessReconnectEndpoint,
-  (endpoint) => {
-    if (!endpoint) return;
-    selectRecentEndpoint(endpoint);
-  },
-  { immediate: true },
-);
-
-watch(
-  recentEndpoints,
-  (endpoints) => {
-    if (reconnectHost.value || reconnectPort.value || endpoints.length === 0) return;
-    selectRecentEndpoint(endpoints[0]);
-  },
-  { immediate: true },
-);
-
-function selectRecentEndpoint(endpoint: string) {
-  const parsed = splitConnectEndpoint(endpoint);
-  reconnectHost.value = parsed.host;
-  reconnectPort.value = parsed.port;
-}
-
-async function reconnect() {
-  errorMessage.value = '';
-  try {
-    await store.adbConnect(
-      buildConnectEndpoint(reconnectHost.value, reconnectPort.value),
-      ui.wirelessReconnectSource,
-      ui.wirelessReconnectEndpoint,
-    );
-    ui.closeModal();
-  } catch (error) {
-    errorMessage.value = String(error instanceof Error ? error.message : error);
-  }
-}
 
 async function submit() {
   if (!selectedSerial.value || !host.value) return;
@@ -78,26 +37,6 @@ async function submit() {
         </button>
       </header>
       <div class="modal-body">
-        <div class="modal-section-title">已配对设备重连</div>
-        <div class="modal-note">已完成 ADB Pair 的设备可直接填写无线调试连接端口，无需再次输入配对码</div>
-        <div v-if="recentEndpoints.length > 0" class="wireless-device-list">
-          <label v-for="endpoint in recentEndpoints" :key="endpoint" class="wireless-device-option">
-            <input
-              type="radio"
-              name="recent-endpoint"
-              :checked="`${reconnectHost}:${reconnectPort}` === endpoint"
-              @change="selectRecentEndpoint(endpoint)"
-            />
-            <span><strong>最近连接</strong><span class="mono">{{ endpoint }}</span></span>
-          </label>
-        </div>
-        <div v-else class="modal-note">暂无最近连接记录，可手动填写已配对设备的 IP 和当前连接端口</div>
-        <div class="form-grid form-grid-ip">
-          <label>设备 IP<input v-model="reconnectHost" class="field-input" placeholder="192.168.1.100" /></label>
-          <label>连接端口<input v-model="reconnectPort" class="field-input" placeholder="39845" /></label>
-        </div>
-        <button class="btn btn-primary" :disabled="!reconnectHost || !reconnectPort" @click="reconnect">重连已配对设备</button>
-        <div class="modal-divider"></div>
         <div class="modal-section-title">选择 USB 连接设备</div>
         <div class="wireless-device-list">
           <label v-for="device in usbDevices" :key="device.serial" class="wireless-device-option">

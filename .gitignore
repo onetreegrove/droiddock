@@ -6,6 +6,8 @@ target/
 src-tauri/target/
 .npm-cache/
 .worktrees/
+.codex/environments/
+.superpowers/
 .electron-cache/
 .electron-builder-cache/
 *.log
