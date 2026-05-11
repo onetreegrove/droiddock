@@ -27,9 +27,28 @@ pub(crate) fn remember_wireless_device(
     config: &mut AppConfig,
     endpoint: String,
     source: WirelessSource,
+    previous_endpoint: Option<String>,
     now: u64,
 ) {
-    let existing = config.device_records.get(&endpoint).cloned();
+    let previous_endpoint = previous_endpoint
+        .map(|endpoint| endpoint.trim().to_string())
+        .filter(|previous_endpoint| {
+            !previous_endpoint.is_empty() && previous_endpoint != &endpoint
+        });
+    let existing = previous_endpoint
+        .as_ref()
+        .and_then(|previous_endpoint| {
+            if let Some(alias) = config.device_aliases.remove(previous_endpoint) {
+                config.device_aliases.insert(endpoint.clone(), alias);
+            }
+            if let Some(options) = config.device_scrcpy_options.remove(previous_endpoint) {
+                config
+                    .device_scrcpy_options
+                    .insert(endpoint.clone(), options);
+            }
+            config.device_records.remove(previous_endpoint)
+        })
+        .or_else(|| config.device_records.get(&endpoint).cloned());
     config.device_records.insert(
         endpoint.clone(),
         DeviceRecord {
@@ -68,6 +87,7 @@ pub(crate) fn adb_connect_with_adb(
     config: &mut AppConfig,
     endpoint: String,
     source: WirelessSource,
+    previous_endpoint: Option<String>,
     now: u64,
 ) -> Result<CommandResult, String> {
     let endpoint = endpoint.trim().to_string();
@@ -78,7 +98,7 @@ pub(crate) fn adb_connect_with_adb(
     let result = run_command_with_timeout(adb, &["connect", &endpoint], Duration::from_secs(15));
     if result.ok {
         remember_endpoint(config, endpoint.clone());
-        remember_wireless_device(config, endpoint, source, now);
+        remember_wireless_device(config, endpoint, source, previous_endpoint, now);
         Ok(result)
     } else {
         Err(result.message)
@@ -133,7 +153,7 @@ pub(crate) fn adb_pair_with_adb(
         }
 
         remember_endpoint(config, connect_endpoint.clone());
-        remember_wireless_device(config, connect_endpoint, WirelessSource::AdbPair, now);
+        remember_wireless_device(config, connect_endpoint, WirelessSource::AdbPair, None, now);
 
         Ok(CommandResult {
             ok: true,
@@ -172,12 +192,54 @@ mod tests {
             &mut config,
             "192.168.1.10:41235".to_string(),
             WirelessSource::AdbPair,
+            None,
             200,
         );
 
         let record = config.device_records.get("192.168.1.10:41235").unwrap();
         assert_eq!(record.endpoint.as_deref(), Some("192.168.1.10:41235"));
         assert_eq!(record.wireless_source, Some(WirelessSource::AdbPair));
+        assert_eq!(record.last_connected_at, Some(200));
+    }
+
+    #[test]
+    fn remember_wireless_record_moves_previous_endpoint_when_port_changes() {
+        let mut config = AppConfig::default();
+        config
+            .device_aliases
+            .insert("192.168.1.10:41235".to_string(), "客厅手机".to_string());
+        config.device_records.insert(
+            "192.168.1.10:41235".to_string(),
+            DeviceRecord {
+                serial: "192.168.1.10:41235".to_string(),
+                display_name: Some("Mi 14".to_string()),
+                model: Some("Mi 14".to_string()),
+                product: Some("test".to_string()),
+                connection: DeviceConnection::Wireless,
+                wireless_source: Some(WirelessSource::AdbPair),
+                endpoint: Some("192.168.1.10:41235".to_string()),
+                last_seen_at: 100,
+                last_connected_at: Some(100),
+            },
+        );
+
+        remember_wireless_device(
+            &mut config,
+            "192.168.1.10:39845".to_string(),
+            WirelessSource::AdbPair,
+            Some("192.168.1.10:41235".to_string()),
+            200,
+        );
+
+        assert!(!config.device_records.contains_key("192.168.1.10:41235"));
+        assert!(!config.device_aliases.contains_key("192.168.1.10:41235"));
+        assert_eq!(
+            config.device_aliases.get("192.168.1.10:39845"),
+            Some(&"客厅手机".to_string())
+        );
+        let record = config.device_records.get("192.168.1.10:39845").unwrap();
+        assert_eq!(record.display_name.as_deref(), Some("Mi 14"));
+        assert_eq!(record.endpoint.as_deref(), Some("192.168.1.10:39845"));
         assert_eq!(record.last_connected_at, Some(200));
     }
 }

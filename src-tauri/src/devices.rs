@@ -141,6 +141,18 @@ fn trim_device_records(config: &mut AppConfig, live_serials: &std::collections::
     }
 }
 
+pub(crate) fn forget_device_record(config: &mut AppConfig, serial: &str) -> bool {
+    let serial = serial.trim();
+    if serial.is_empty() {
+        return false;
+    }
+
+    let removed = config.device_records.remove(serial).is_some();
+    config.device_aliases.remove(serial);
+    config.device_scrcpy_options.remove(serial);
+    removed
+}
+
 pub(crate) fn parse_and_merge_devices(
     output: &str,
     config: &mut AppConfig,
@@ -362,5 +374,43 @@ mod tests {
                 .map(|record| record.last_seen_at),
             Some(100)
         );
+    }
+
+    #[test]
+    fn forget_device_record_removes_history_alias_and_options() {
+        let mut config = AppConfig::default();
+        config
+            .device_aliases
+            .insert("192.168.1.2:5555".to_string(), "客厅手机".to_string());
+        config.device_records.insert(
+            "192.168.1.2:5555".to_string(),
+            DeviceRecord {
+                serial: "192.168.1.2:5555".to_string(),
+                display_name: Some("Mi 14".to_string()),
+                model: Some("Mi 14".to_string()),
+                product: Some("test".to_string()),
+                connection: DeviceConnection::Wireless,
+                wireless_source: Some(WirelessSource::AdbPair),
+                endpoint: Some("192.168.1.2:5555".to_string()),
+                last_seen_at: 50,
+                last_connected_at: Some(50),
+            },
+        );
+        config.device_scrcpy_options.insert(
+            "192.168.1.2:5555".to_string(),
+            crate::config::DeviceOptionEntry {
+                preset_id: Some("daily".to_string()),
+                options: crate::scrcpy::ScrcpyOptions::default(),
+                updated_at: 50,
+            },
+        );
+
+        assert!(forget_device_record(&mut config, "192.168.1.2:5555"));
+
+        assert!(!config.device_records.contains_key("192.168.1.2:5555"));
+        assert!(!config.device_aliases.contains_key("192.168.1.2:5555"));
+        assert!(!config
+            .device_scrcpy_options
+            .contains_key("192.168.1.2:5555"));
     }
 }

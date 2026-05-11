@@ -263,6 +263,21 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
+  async function forgetDevice(serial: string) {
+    setBusy('devices', true);
+    try {
+      await invokeCommand('forget_device', { serial });
+      await fetchAppConfig();
+      await refreshDevices();
+      log(`已删除历史设备: ${serial}`);
+    } catch (error) {
+      log(`删除历史设备失败: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      setBusy('devices', false);
+    }
+  }
+
   async function adbTcpip(serial: string, port?: number) {
     setBusy('wireless', true);
     try {
@@ -276,10 +291,10 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  async function adbConnect(endpoint: string, source: WirelessSource = 'manual') {
+  async function adbConnect(endpoint: string, source: WirelessSource = 'manual', previousEndpoint: string | null = null) {
     setBusy('wireless', true);
     try {
-      await invokeCommand('adb_connect', { endpoint, source });
+      await invokeCommand('adb_connect', { endpoint, source, previousEndpoint });
       log(`已连接无线设备: ${endpoint}`);
       await fetchAppConfig();
       await refreshDevices();
@@ -360,6 +375,7 @@ export const useAppStore = defineStore('app', () => {
     stopMirror,
     stopAllSessions,
     saveDeviceAlias,
+    forgetDevice,
     adbTcpip,
     adbConnect,
     adbPair,

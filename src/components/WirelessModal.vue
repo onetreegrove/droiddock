@@ -42,7 +42,11 @@ function selectRecentEndpoint(endpoint: string) {
 async function reconnect() {
   errorMessage.value = '';
   try {
-    await store.adbConnect(buildConnectEndpoint(reconnectHost.value, reconnectPort.value), ui.wirelessReconnectSource);
+    await store.adbConnect(
+      buildConnectEndpoint(reconnectHost.value, reconnectPort.value),
+      ui.wirelessReconnectSource,
+      ui.wirelessReconnectEndpoint,
+    );
     ui.closeModal();
   } catch (error) {
     errorMessage.value = String(error instanceof Error ? error.message : error);

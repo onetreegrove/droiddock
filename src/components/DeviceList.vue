@@ -1,4 +1,7 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue';
+import type { ManagedDevice } from '../types/app';
+import ConfirmModal from './ConfirmModal.vue';
 import StatusChip from './StatusChip.vue';
 import { wirelessSourceLabel } from '../domain/wireless';
 import { useAppStore } from '../stores/app';
@@ -6,6 +9,11 @@ import { useUiStore } from '../stores/ui';
 
 const store = useAppStore();
 const ui = useUiStore();
+const pendingForgetDevice = ref<ManagedDevice | null>(null);
+const pendingForgetDeviceName = computed(() => {
+  const device = pendingForgetDevice.value;
+  return device?.alias || device?.display_name || device?.model || device?.serial || '';
+});
 
 function stateLabel(state: string) {
   if (state === 'device') return '可用';
@@ -40,6 +48,17 @@ function connectionHint(device: { presence: string; connection: string }) {
   if (device.presence !== 'offline') return '';
   if (device.connection === 'usb') return '插入 USB 后会自动刷新';
   return '可重连，端口可修改';
+}
+
+function requestForgetDevice(device: ManagedDevice) {
+  pendingForgetDevice.value = device;
+}
+
+async function confirmForgetDevice() {
+  const device = pendingForgetDevice.value;
+  if (!device) return;
+  await store.forgetDevice(device.serial);
+  pendingForgetDevice.value = null;
 }
 </script>
 
@@ -81,6 +100,14 @@ function connectionHint(device: { presence: string; connection: string }) {
           >
             重连
           </button>
+          <button
+            v-if="device.presence === 'offline'"
+            class="btn btn-danger compact-button"
+            :disabled="store.busy.devices"
+            @click.stop="requestForgetDevice(device)"
+          >
+            删除
+          </button>
         </div>
         <div v-if="device.state === 'unauthorized'" class="device-warning">
           <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
@@ -92,5 +119,14 @@ function connectionHint(device: { presence: string; connection: string }) {
       </article>
       <div v-if="store.devices.length === 0" class="empty-panel">未检测到设备，请连接 USB，或使用设备页右上角的无线连接入口。</div>
     </div>
+    <ConfirmModal
+      v-if="pendingForgetDevice"
+      title="删除历史设备"
+      :message="`删除历史设备“${pendingForgetDeviceName}”？删除后不会影响手机，重新连接后会再次出现在列表中。`"
+      confirm-text="删除"
+      danger
+      @confirm="confirmForgetDevice"
+      @cancel="pendingForgetDevice = null"
+    />
   </section>
 </template>

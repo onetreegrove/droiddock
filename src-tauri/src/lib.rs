@@ -179,6 +179,19 @@ fn clear_device_scrcpy_options(
 }
 
 #[tauri::command]
+fn forget_device(state: State<'_, AppState>, serial: String) -> Result<AppConfig, String> {
+    let mut config = state
+        .config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_string())?;
+
+    devices::forget_device_record(&mut config, &serial);
+    save_config_atomic(&config)?;
+
+    Ok(config.clone())
+}
+
+#[tauri::command]
 fn get_tool_status(state: State<'_, AppState>) -> Result<ToolStatus, String> {
     let config = state
         .config
@@ -232,6 +245,7 @@ fn adb_connect(
     state: State<'_, AppState>,
     endpoint: String,
     source: Option<WirelessSource>,
+    previous_endpoint: Option<String>,
 ) -> Result<CommandResult, String> {
     let mut config = state
         .config
@@ -244,6 +258,7 @@ fn adb_connect(
         &mut config,
         endpoint,
         source.unwrap_or(WirelessSource::Manual),
+        previous_endpoint,
         now_secs(),
     )?;
     save_state_config(&state, config)?;
@@ -333,6 +348,7 @@ pub fn run() {
             save_default_scrcpy_options,
             save_device_scrcpy_options,
             clear_device_scrcpy_options,
+            forget_device,
             get_tool_status,
             install_tools,
             list_devices,
