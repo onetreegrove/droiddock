@@ -44,7 +44,7 @@ const runningCount = computed(() => store.sessions.filter((session) => session.s
             <path d="M5 13.5h6M8 12v1.5" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
           </svg>
         </span>
-        <span>投屏会话</span>
+        <span>投屏总览</span>
         <span v-if="runningCount" class="nav-badge">{{ runningCount }}</span>
       </button>
       <button :class="['nav-item', { active: ui.currentPage === 'setup' }]" @click="ui.openPage('setup')">

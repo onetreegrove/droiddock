@@ -19,6 +19,17 @@ export const useSessionsStore = defineStore('sessions', {
   getters: {
     activeSession: (state) => (serial: string) =>
       state.sessions.find((session) => session.serial === serial && session.status === 'running') ?? null,
+    latestSession: (state) => (serial: string) =>
+      [...state.sessions]
+        .filter((session) => session.serial === serial)
+        .sort((left, right) => right.started_at - left.started_at)[0] ?? null,
+    displaySession: (state) => (serial: string) => {
+      const activeSession = state.sessions.find((session) => session.serial === serial && session.status === 'running');
+      if (activeSession) return activeSession;
+      return [...state.sessions]
+        .filter((session) => session.serial === serial)
+        .sort((left, right) => right.started_at - left.started_at)[0] ?? null;
+    },
   },
   actions: {
     async refreshSessions() {

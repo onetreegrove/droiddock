@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import CommandPreview from './CommandPreview.vue';
+import DeviceSessionPanel from './DeviceSessionPanel.vue';
 import ParameterEditor from './ParameterEditor.vue';
 import StatusChip from './StatusChip.vue';
 import { buildScrcpyCommand, presetLabels, presetOptions } from '../domain/scrcpyOptions';
@@ -15,13 +16,18 @@ const editorOptions = ref<ScrcpyOptions>({});
 const activePreset = ref<PresetId>('daily');
 const device = computed(() => store.selectedDevice);
 const hasDeviceOptions = computed(() => Boolean(device.value && store.deviceOptionEntry(device.value.serial)));
+const displaySession = computed(() => (device.value ? store.displaySession(device.value.serial) : null));
+const isMirroring = computed(() => displaySession.value?.status === 'running');
 const ipAddress = computed(() => (device.value ? deviceIpAddress(device.value.serial) : null));
 const command = computed(() => (device.value ? buildScrcpyCommand(device.value.serial, editorOptions.value) : 'scrcpy'));
 const canReconnectAndLaunch = computed(
   () => Boolean(device.value?.connection === 'wireless' && device.value?.presence === 'offline' && device.value?.endpoint && store.isToolsReady),
 );
 const canLaunch = computed(
-  () => Boolean(device.value?.presence === 'online' && device.value?.state === 'device' && store.isToolsReady) || canReconnectAndLaunch.value,
+  () =>
+    !isMirroring.value &&
+    (Boolean(device.value?.presence === 'online' && device.value?.state === 'device' && store.isToolsReady) ||
+      canReconnectAndLaunch.value),
 );
 const launchButtonText = computed(() => (canReconnectAndLaunch.value ? '重连投屏' : '启动投屏'));
 const launchHint = computed(() => {
@@ -131,6 +137,7 @@ async function handleEditAlias() {
         <span>IP</span><span class="mono">{{ ipAddress || '-' }}</span>
       </div>
     </div>
+    <DeviceSessionPanel :device="device" :session="displaySession" />
     <section class="detail-section">
       <div class="section-head">
         <div>

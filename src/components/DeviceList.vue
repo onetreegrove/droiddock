@@ -50,6 +50,26 @@ function connectionHint(device: { presence: string; connection: string }) {
   return '可重连，端口可修改';
 }
 
+function mirrorSession(device: ManagedDevice) {
+  return store.displaySession(device.serial);
+}
+
+function mirrorLabel(device: ManagedDevice) {
+  const session = mirrorSession(device);
+  if (!session) return '';
+  if (session.status === 'running') return '投屏中';
+  if (session.status === 'failed') return '投屏失败';
+  if (session.status === 'stopped') return '最近停止';
+  return '';
+}
+
+function mirrorTone(device: ManagedDevice): 'green' | 'yellow' | 'red' | 'gray' {
+  const session = mirrorSession(device);
+  if (session?.status === 'running') return 'green';
+  if (session?.status === 'failed') return 'red';
+  return 'gray';
+}
+
 function requestForgetDevice(device: ManagedDevice) {
   pendingForgetDevice.value = device;
 }
@@ -68,7 +88,13 @@ async function confirmForgetDevice() {
       <article
         v-for="device in store.devices"
         :key="device.serial"
-        :class="['device-card', { selected: ui.selectedSerial === device.serial }]"
+        :class="[
+          'device-card',
+          {
+            selected: ui.selectedSerial === device.serial,
+            mirroring: mirrorSession(device)?.status === 'running',
+          },
+        ]"
         @click="ui.selectedSerial = device.serial"
       >
         <div class="device-card-main">
@@ -85,6 +111,7 @@ async function confirmForgetDevice() {
           <div class="device-chips">
             <StatusChip :tone="presenceTone(device)" :label="presenceLabel(device)" dot />
             <StatusChip tone="gray" :label="connectionLabel(device)" />
+            <StatusChip v-if="mirrorLabel(device)" :tone="mirrorTone(device)" :label="mirrorLabel(device)" dot />
           </div>
         </div>
         <div v-if="connectionHint(device)" class="device-warning">

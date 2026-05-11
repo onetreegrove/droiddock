@@ -16,6 +16,10 @@ export const useUiStore = defineStore('ui', {
     openPage(page: PageKey) {
       this.currentPage = page;
     },
+    showDevice(serial: string) {
+      this.selectedSerial = serial;
+      this.currentPage = 'devices';
+    },
     openModal(modal: Exclude<ModalKey, null>) {
       this.modal = modal;
     },

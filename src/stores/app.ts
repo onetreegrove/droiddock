@@ -66,6 +66,8 @@ export const useAppStore = defineStore('app', () => {
   const isToolsReady = computed(() => tools.isToolsReady);
   const availableDeviceCount = computed(() => devicesStore.availableDeviceCount);
   const activeSession = (serial: string) => sessionsStore.activeSession(serial);
+  const latestSession = (serial: string) => sessionsStore.latestSession(serial);
+  const displaySession = (serial: string) => sessionsStore.displaySession(serial);
   const deviceOptionEntry = (serial: string) => config.deviceOptionEntry(serial);
   const effectiveOptions = (serial: string) => {
     const globalOptions = config.appConfig?.default_scrcpy_options ?? defaultScrcpyOptions;
@@ -217,7 +219,6 @@ export const useAppStore = defineStore('app', () => {
     try {
       const finalOptions = options ?? effectiveOptions(serial);
       const info = await sessionsStore.startMirror(serial, finalOptions);
-      ui.openPage('sessions');
       log(`已启动投屏: ${serial}`);
       return info;
     } catch (error) {
@@ -357,6 +358,8 @@ export const useAppStore = defineStore('app', () => {
     isToolsReady,
     availableDeviceCount,
     activeSession,
+    latestSession,
+    displaySession,
     deviceOptionEntry,
     effectiveOptions,
     log,

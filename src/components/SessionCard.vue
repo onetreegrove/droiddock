@@ -5,7 +5,9 @@ import type { SessionInfo } from '../types/app';
 import { useAppStore } from '../stores/app';
 import { useUiStore } from '../stores/ui';
 
-const props = defineProps<{ session: SessionInfo }>();
+const props = withDefaults(defineProps<{ session: SessionInfo; showDeviceAction?: boolean }>(), {
+  showDeviceAction: false,
+});
 const store = useAppStore();
 const ui = useUiStore();
 const tags = computed(() => optionSummaryTagsFromArgs(props.session.args));
@@ -29,6 +31,9 @@ const running = computed(() => props.session.status === 'running');
         <div class="tag-row"><span v-for="tag in tags" :key="tag" class="param-tag mono">{{ tag }}</span></div>
       </div>
       <div class="session-actions">
+        <button v-if="showDeviceAction" class="btn btn-ghost compact-button" @click="ui.showDevice(session.serial)">
+          查看设备
+        </button>
         <button v-if="running" class="btn btn-danger compact-button" @click="store.stopMirror(session.session_id)">
           <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden="true">
             <rect x="2" y="2" width="6" height="6" rx=".8" fill="currentColor" />

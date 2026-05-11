@@ -413,6 +413,14 @@ button {
   box-shadow: 0 0 0 1px var(--acc-d);
 }
 
+.device-card.mirroring {
+  border-color: rgba(48, 209, 88, 0.42);
+}
+
+.device-card.mirroring .device-icon {
+  color: #30d158;
+}
+
 .device-card-main {
   display: flex;
   align-items: center;
@@ -606,6 +614,10 @@ button {
   font-size: 13px;
 }
 
+.metadata-grid.compact {
+  grid-template-columns: max-content minmax(0, 1fr);
+}
+
 .metadata-grid span:nth-child(odd) {
   color: var(--t3);
   font-size: 12px;
@@ -613,6 +625,15 @@ button {
 
 .detail-section {
   padding: 20px 28px;
+}
+
+.device-session-panel {
+  margin-bottom: 12px;
+}
+
+.device-session-body {
+  display: grid;
+  gap: 10px;
 }
 
 .section-head {
@@ -832,6 +853,11 @@ button {
   color: var(--t3);
 }
 
+.compact-empty {
+  padding: 12px;
+  place-items: start;
+}
+
 .empty-title {
   color: var(--t1);
   font-size: 18px;
@@ -912,6 +938,14 @@ button {
   color: var(--t3);
   font-size: 12px;
   margin-bottom: 10px;
+}
+
+.session-message.error {
+  border: 1px solid rgba(255, 69, 58, 0.38);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: rgba(255, 69, 58, 0.08);
+  color: #ffb4ad;
 }
 
 .tag-row {
