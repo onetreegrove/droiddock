@@ -130,14 +130,13 @@ async function handleEditAlias() {
       <ParameterEditor v-model:options="editorOptions" variant="device" />
       <CommandPreview :command="command" />
     </section>
-    <footer class="launch-bar">
-      <button class="btn btn-primary launch-button" :disabled="!canLaunch" @click="launch">
+    <footer class="launch-bar" :class="{ disabled: !canLaunch }">
+      <button class="btn btn-primary launch-button" :disabled="!canLaunch" :title="launchHint || '启动投屏'" @click="launch">
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
           <path d="M3 2L11 6.5L3 11V2Z" fill="currentColor" />
         </svg>
         启动投屏
       </button>
-      <span class="hint-text">{{ launchHint }}</span>
     </footer>
   </section>
   <section v-else class="device-detail empty-detail">

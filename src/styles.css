@@ -633,11 +633,18 @@ button {
   font-weight: 600;
 }
 
+.parameter-editor {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px 16px;
+}
+
 .param-row {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 8px 0;
+  min-width: 0;
+  padding: 0;
 }
 
 .param-label {
@@ -659,6 +666,11 @@ button {
   transition: border-color 0.2s;
 }
 
+.param-row .field-select {
+  flex: 1;
+  min-width: 0;
+}
+
 .field-select:focus,
 .field-input:focus {
   border-color: var(--acc);
@@ -669,11 +681,32 @@ button {
   min-height: 36px;
 }
 
+.toggle-groups {
+  display: grid;
+  grid-column: 1 / -1;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.toggle-group {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  min-width: 0;
+}
+
+.toggle-group-title {
+  padding-top: 13px;
+  color: var(--t3);
+  font-size: 12px;
+  font-weight: 700;
+}
+
 .toggle-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
   gap: 8px;
-  margin-top: 12px;
 }
 
 .toggle-card {
@@ -683,8 +716,8 @@ button {
   gap: 10px;
   min-height: 48px;
   border: 1px solid var(--border1);
-  border-radius: 10px;
-  padding: 8px 12px;
+  border-radius: 8px;
+  padding: 8px 10px;
   background: var(--bg4);
   color: var(--t1);
   cursor: pointer;
@@ -695,6 +728,8 @@ button {
 .toggle-card span {
   color: var(--t3);
   font-size: 12px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
 }
 
 .toggle-card.on {
@@ -705,6 +740,7 @@ button {
 .toggle-title {
   font-size: 13px;
   font-weight: 500;
+  white-space: nowrap;
 }
 
 .toggle-switch {
@@ -763,12 +799,18 @@ button {
 }
 
 .launch-bar {
+  position: sticky;
+  bottom: 0;
+  z-index: 4;
   margin-top: auto;
   border-top: 1px solid var(--border1);
   padding: 18px 28px;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 16px;
+  background: rgba(13, 15, 18, 0.86);
+  backdrop-filter: blur(18px);
 }
 
 .launch-button {
@@ -1347,7 +1389,6 @@ label {
     grid-template-columns: 280px 1fr;
   }
 
-  .toggle-grid,
   .form-grid-ip {
     grid-template-columns: 1fr;
   }

@@ -50,35 +50,50 @@ function patch(value: Partial<ScrcpyOptions>) {
         <option value="2M">2 Mbps</option>
       </select>
     </div>
-    <div class="toggle-grid">
-      <button :class="['toggle-card', { on: options.noAudio }]" @click="patch({ noAudio: !options.noAudio })">
-        <div><div class="toggle-title">禁用音频</div><span>--no-audio</span></div>
-        <span :class="['toggle-switch', { on: options.noAudio }]"><span></span></span>
-      </button>
-      <button :class="['toggle-card', { on: options.noControl }]" @click="patch({ noControl: !options.noControl })">
-        <div><div class="toggle-title">只看不控</div><span>--no-control</span></div>
-        <span :class="['toggle-switch', { on: options.noControl }]"><span></span></span>
-      </button>
-      <button :class="['toggle-card', { on: options.stayAwake }]" @click="patch({ stayAwake: !options.stayAwake })">
-        <div><div class="toggle-title">保持亮屏</div><span>--stay-awake</span></div>
-        <span :class="['toggle-switch', { on: options.stayAwake }]"><span></span></span>
-      </button>
-      <button :class="['toggle-card', { on: options.turnScreenOff }]" @click="patch({ turnScreenOff: !options.turnScreenOff })">
-        <div><div class="toggle-title">息屏投屏</div><span>--turn-screen-off</span></div>
-        <span :class="['toggle-switch', { on: options.turnScreenOff }]"><span></span></span>
-      </button>
-      <button :class="['toggle-card', { on: options.alwaysOnTop }]" @click="patch({ alwaysOnTop: !options.alwaysOnTop })">
-        <div><div class="toggle-title">置顶窗口</div><span>--always-on-top</span></div>
-        <span :class="['toggle-switch', { on: options.alwaysOnTop }]"><span></span></span>
-      </button>
-      <button :class="['toggle-card', { on: options.showTouches }]" @click="patch({ showTouches: !options.showTouches })">
-        <div><div class="toggle-title">显示触摸</div><span>--show-touches</span></div>
-        <span :class="['toggle-switch', { on: options.showTouches }]"><span></span></span>
-      </button>
-      <button :class="['toggle-card', { on: options.fullscreen }]" @click="patch({ fullscreen: !options.fullscreen })">
-        <div><div class="toggle-title">全屏</div><span>--fullscreen</span></div>
-        <span :class="['toggle-switch', { on: options.fullscreen }]"><span></span></span>
-      </button>
+    <div class="toggle-groups">
+      <div class="toggle-group">
+        <div class="toggle-group-title">窗口</div>
+        <div class="toggle-grid">
+          <button :class="['toggle-card', { on: options.alwaysOnTop }]" @click="patch({ alwaysOnTop: !options.alwaysOnTop })">
+            <div><div class="toggle-title">置顶窗口</div><span>--always-on-top</span></div>
+            <span :class="['toggle-switch', { on: options.alwaysOnTop }]"><span></span></span>
+          </button>
+          <button :class="['toggle-card', { on: options.fullscreen }]" @click="patch({ fullscreen: !options.fullscreen })">
+            <div><div class="toggle-title">全屏</div><span>--fullscreen</span></div>
+            <span :class="['toggle-switch', { on: options.fullscreen }]"><span></span></span>
+          </button>
+        </div>
+      </div>
+      <div class="toggle-group">
+        <div class="toggle-group-title">控制</div>
+        <div class="toggle-grid">
+          <button :class="['toggle-card', { on: options.noControl }]" @click="patch({ noControl: !options.noControl })">
+            <div><div class="toggle-title">只看不控</div><span>--no-control</span></div>
+            <span :class="['toggle-switch', { on: options.noControl }]"><span></span></span>
+          </button>
+          <button :class="['toggle-card', { on: options.stayAwake }]" @click="patch({ stayAwake: !options.stayAwake })">
+            <div><div class="toggle-title">保持亮屏</div><span>--stay-awake</span></div>
+            <span :class="['toggle-switch', { on: options.stayAwake }]"><span></span></span>
+          </button>
+          <button :class="['toggle-card', { on: options.showTouches }]" @click="patch({ showTouches: !options.showTouches })">
+            <div><div class="toggle-title">显示触摸</div><span>--show-touches</span></div>
+            <span :class="['toggle-switch', { on: options.showTouches }]"><span></span></span>
+          </button>
+        </div>
+      </div>
+      <div class="toggle-group">
+        <div class="toggle-group-title">设备</div>
+        <div class="toggle-grid">
+          <button :class="['toggle-card', { on: options.noAudio }]" @click="patch({ noAudio: !options.noAudio })">
+            <div><div class="toggle-title">禁用音频</div><span>--no-audio</span></div>
+            <span :class="['toggle-switch', { on: options.noAudio }]"><span></span></span>
+          </button>
+          <button :class="['toggle-card', { on: options.turnScreenOff }]" @click="patch({ turnScreenOff: !options.turnScreenOff })">
+            <div><div class="toggle-title">息屏投屏</div><span>--turn-screen-off</span></div>
+            <span :class="['toggle-switch', { on: options.turnScreenOff }]"><span></span></span>
+          </button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
