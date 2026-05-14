@@ -19,6 +19,7 @@ import { useUiStore } from './stores/ui';
 const store = useAppStore();
 const ui = useUiStore();
 const showExitConfirm = ref(false);
+const manualRefreshing = ref(false);
 let poller: number | undefined;
 let unlistenClose: UnlistenFn | undefined;
 let unlistenLogs: UnlistenFn | undefined;
@@ -57,6 +58,16 @@ async function handleExitConfirm() {
   await getCurrentWindow().destroy();
 }
 
+async function handleManualRefresh() {
+  if (manualRefreshing.value) return;
+  manualRefreshing.value = true;
+  try {
+    await store.refreshRuntimeState();
+  } finally {
+    manualRefreshing.value = false;
+  }
+}
+
 onUnmounted(() => {
   if (poller) window.clearInterval(poller);
   unlistenClose?.();
@@ -74,12 +85,20 @@ onUnmounted(() => {
             <template #actions>
               <button class="btn btn-ghost" @click="ui.openModal('wireless')">USB 转无线</button>
               <button class="btn btn-ghost" @click="ui.openModal('pair')">ADB Pair</button>
-              <button class="btn btn-ghost" :disabled="store.busy.devices" @click="store.refreshRuntimeState">
-                <svg v-if="!store.busy.devices" width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <button class="btn btn-ghost refresh-button" :disabled="manualRefreshing" @click="handleManualRefresh">
+                <svg
+                  class="refresh-icon"
+                  :class="{ spinning: manualRefreshing }"
+                  width="12"
+                  height="12"
+                  viewBox="0 0 12 12"
+                  fill="none"
+                  aria-hidden="true"
+                >
                   <path d="M10 5.5A4 4 0 1 1 6 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
                   <path d="M7.5 2h-1.5v1.5" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
                 </svg>
-                {{ store.busy.devices ? '刷新中...' : '刷新' }}
+                刷新
               </button>
             </template>
           </AppHeader>

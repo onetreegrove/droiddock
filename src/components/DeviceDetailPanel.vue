@@ -6,6 +6,7 @@ import DeviceSessionPanel from './DeviceSessionPanel.vue';
 import DeviceStatusBanner from './DeviceStatusBanner.vue';
 import ParameterEditor from './ParameterEditor.vue';
 import StatusChip from './StatusChip.vue';
+import { launchAvailability } from '../domain/deviceDetail';
 import { buildScrcpyCommand, presetLabels, presetOptions } from '../domain/scrcpyOptions';
 import { deviceIpAddress, wirelessSourceLabel } from '../domain/wireless';
 import type { PresetId, ScrcpyOptions } from '../types/app';
@@ -16,33 +17,20 @@ const store = useAppStore();
 const ui = useUiStore();
 const editorOptions = ref<ScrcpyOptions>({});
 const activePreset = ref<PresetId>('daily');
+const aliasModalOpen = ref(false);
+const aliasDraft = ref('');
+const aliasError = ref('');
 const device = computed(() => store.selectedDevice);
 const hasDeviceOptions = computed(() => Boolean(device.value && store.deviceOptionEntry(device.value.serial)));
 const displaySession = computed(() => (device.value ? store.displaySession(device.value.serial) : null));
 const isMirroring = computed(() => displaySession.value?.status === 'running');
 const ipAddress = computed(() => (device.value ? deviceIpAddress(device.value.serial) : null));
 const command = computed(() => (device.value ? buildScrcpyCommand(device.value.serial, editorOptions.value) : 'scrcpy'));
-const canReconnectAndLaunch = computed(
-  () => Boolean(device.value?.connection === 'wireless' && device.value?.presence === 'offline' && device.value?.endpoint && store.isToolsReady),
-);
-const canLaunch = computed(
-  () =>
-    !isMirroring.value &&
-    (Boolean(device.value?.presence === 'online' && device.value?.state === 'device' && store.isToolsReady) ||
-      canReconnectAndLaunch.value),
-);
-const launchButtonText = computed(() => (canReconnectAndLaunch.value ? '重连投屏' : '启动投屏'));
-const launchHint = computed(() => {
-  if (!device.value) return '请选择设备';
-  if (!store.isToolsReady) return '请先完成工具配置';
-  if (device.value.presence === 'offline') {
-    if (canReconnectAndLaunch.value) return '确认无线调试地址后重连并启动投屏';
-    return device.value.connection === 'wireless' ? '缺少无线连接地址，请重新配对或通过 USB 转无线' : '设备当前不在线，插入 USB 后会自动刷新';
-  }
-  if (device.value.state === 'unauthorized') return '请先在手机上允许 USB 调试授权';
-  if (device.value.state === 'offline') return '设备已离线，请重新连接';
-  return '';
-});
+const launchState = computed(() => launchAvailability(device.value, isMirroring.value, store.isToolsReady));
+const canLaunch = computed(() => launchState.value.canLaunch);
+const canReconnectAndLaunch = computed(() => launchState.value.reconnectAndLaunch);
+const launchButtonText = computed(() => launchState.value.buttonText);
+const launchHint = computed(() => launchState.value.hint);
 const connectionLabel = computed(() => {
   if (!device.value) return '-';
   if (device.value.connection === 'usb') return 'USB';
@@ -57,6 +45,14 @@ watch(
     activePreset.value = store.deviceOptionEntry(serial)?.presetId ?? store.appConfig?.default_preset_id ?? 'daily';
   },
   { immediate: true },
+);
+
+watch(
+  () => ui.selectedSerial,
+  () => {
+    aliasModalOpen.value = false;
+    aliasError.value = '';
+  },
 );
 
 function applyPreset(presetId: PresetId) {
@@ -85,11 +81,22 @@ async function launch() {
   await store.startMirror(device.value.serial, editorOptions.value);
 }
 
-async function handleEditAlias() {
+function handleEditAlias() {
   if (!device.value) return;
-  const newAlias = window.prompt('输入设备别名', device.value.alias || device.value.model || '');
-  if (newAlias === null) return;
-  await store.saveDeviceAlias(device.value.serial, newAlias.trim() || null);
+  aliasDraft.value = device.value.alias || device.value.display_name || device.value.model || '';
+  aliasError.value = '';
+  aliasModalOpen.value = true;
+}
+
+async function saveAlias() {
+  if (!device.value) return;
+  aliasError.value = '';
+  try {
+    await store.saveDeviceAlias(device.value.serial, aliasDraft.value.trim() || null);
+    aliasModalOpen.value = false;
+  } catch (error) {
+    aliasError.value = String(error instanceof Error ? error.message : error);
+  }
 }
 </script>
 
@@ -123,6 +130,10 @@ async function handleEditAlias() {
       <CommandPreview :command="command" />
     </section>
     <footer class="launch-bar" :class="{ disabled: !canLaunch }">
+      <div class="launch-copy">
+        <div class="launch-title">{{ launchState.title }}</div>
+        <div class="launch-hint">{{ launchHint || '将使用当前参数启动独立 scrcpy 投屏窗口' }}</div>
+      </div>
       <button class="btn btn-primary launch-button" :disabled="!canLaunch" :title="launchHint || launchButtonText" @click="launch">
         <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
           <path d="M3 2L11 6.5L3 11V2Z" fill="currentColor" />
@@ -130,6 +141,33 @@ async function handleEditAlias() {
         {{ launchButtonText }}
       </button>
     </footer>
+    <div v-if="aliasModalOpen" class="modal-overlay" @click.self="aliasModalOpen = false">
+      <form class="modal-card alias-modal" @submit.prevent="saveAlias">
+        <header class="modal-header">
+          <div>
+            <div class="modal-title">编辑设备别名</div>
+            <div class="modal-subtitle">给这台设备取一个更容易识别的名称</div>
+          </div>
+          <button type="button" class="modal-close" aria-label="关闭" @click="aliasModalOpen = false">
+            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+              <path d="M2 2l8 8M10 2L2 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" />
+            </svg>
+          </button>
+        </header>
+        <div class="modal-body">
+          <label>
+            设备别名
+            <input v-model="aliasDraft" class="field-input" maxlength="40" placeholder="例如：客厅手机" />
+          </label>
+          <div class="modal-note">留空后会恢复为设备型号或系统名称。</div>
+          <div v-if="aliasError" class="modal-error">{{ aliasError }}</div>
+        </div>
+        <footer class="modal-footer">
+          <button type="button" class="btn btn-ghost" @click="aliasModalOpen = false">取消</button>
+          <button class="btn btn-primary" type="submit">保存别名</button>
+        </footer>
+      </form>
+    </div>
   </section>
   <section v-else class="device-detail empty-detail">
     <div>

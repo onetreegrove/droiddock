@@ -288,6 +288,24 @@ button {
   flex-wrap: wrap;
 }
 
+.refresh-button {
+  min-width: 72px;
+}
+
+.refresh-icon {
+  flex: 0 0 auto;
+}
+
+.refresh-icon.spinning {
+  animation: refresh-spin 0.8s linear infinite;
+}
+
+@keyframes refresh-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .chip {
   display: inline-flex;
   align-items: center;
@@ -541,6 +559,7 @@ button {
   overflow-y: auto;
   display: flex;
   flex-direction: column;
+  scroll-padding-bottom: 112px;
 }
 
 .device-hero-block {
@@ -570,13 +589,52 @@ button {
   padding: 20px 28px;
 }
 
+.detail-section:last-of-type {
+  padding-bottom: 128px;
+}
+
 .device-session-panel {
   margin-bottom: 12px;
 }
 
 .device-session-body {
   display: grid;
-  gap: 10px;
+  gap: 12px;
+}
+
+.session-detail-meta {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) max-content max-content;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.session-detail-item {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  border: 1px solid var(--border1);
+  border-radius: 8px;
+  padding: 8px 10px;
+  background: var(--bg3);
+}
+
+.session-detail-item.compact {
+  min-width: 86px;
+}
+
+.session-detail-item span {
+  color: var(--t3);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+.session-detail-item strong {
+  min-width: 0;
+  color: var(--t1);
+  font-size: 12px;
+  font-weight: 500;
+  overflow-wrap: anywhere;
 }
 
 .section-head {
@@ -771,13 +829,32 @@ button {
   padding: 18px 28px;
   display: flex;
   align-items: center;
-  justify-content: flex-end;
+  justify-content: space-between;
   gap: 16px;
-  background: rgba(13, 15, 18, 0.86);
-  backdrop-filter: blur(18px);
+  background: var(--bg);
+  box-shadow: 0 -18px 36px rgba(0, 0, 0, 0.28);
+}
+
+.launch-copy {
+  min-width: 0;
+}
+
+.launch-title {
+  color: var(--t1);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.launch-hint {
+  margin-top: 3px;
+  color: var(--t3);
+  font-size: 12px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
 }
 
 .launch-button {
+  flex: 0 0 auto;
   min-height: 42px;
   padding: 8px 24px;
   font-size: 15px;
@@ -894,7 +971,7 @@ button {
 .tag-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 6px;
 }
 
 .param-tag {
@@ -904,6 +981,15 @@ button {
   background: var(--bg);
   color: var(--t3);
   font-size: 12px;
+}
+
+.device-session-panel .tag-row {
+  margin-top: 2px;
+}
+
+.device-session-panel .param-tag {
+  background: var(--bg3);
+  color: var(--t2);
 }
 
 .session-actions {
@@ -1169,6 +1255,10 @@ button {
   box-shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
 }
 
+.alias-modal {
+  width: min(420px, calc(100vw - 32px));
+}
+
 .modal-header,
 .modal-footer {
   display: flex;
@@ -1385,5 +1475,14 @@ label {
 
   .form-grid-ip {
     grid-template-columns: 1fr;
+  }
+
+  .launch-bar {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .launch-button {
+    width: 100%;
   }
 }

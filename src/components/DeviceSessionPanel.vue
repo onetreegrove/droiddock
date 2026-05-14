@@ -2,6 +2,7 @@
 import { computed, watch } from 'vue';
 import LogPanel from './LogPanel.vue';
 import StatusChip from './StatusChip.vue';
+import { canRelaunchSession } from '../domain/deviceDetail';
 import { optionSummaryTagsFromArgs } from '../domain/scrcpyOptions';
 import type { ManagedDevice, SessionInfo } from '../types/app';
 import { useAppStore } from '../stores/app';
@@ -19,6 +20,7 @@ const running = computed(() => props.session?.status === 'running');
 const failed = computed(() => props.session?.status === 'failed');
 const unauthorized = computed(() => props.device.state === 'unauthorized');
 const tags = computed(() => (props.session ? optionSummaryTagsFromArgs(props.session.args) : []));
+const relaunchDisabled = computed(() => store.busy.start || !canRelaunchSession(props.device, store.isToolsReady));
 const title = computed(() => {
   if (!props.session) return '当前未投屏';
   if (running.value) return '当前会话';
@@ -79,7 +81,8 @@ async function relaunch() {
         <button
           v-else
           class="btn btn-ghost compact-button"
-          :disabled="store.busy.start || (device.presence === 'offline' && device.connection === 'usb')"
+          :disabled="relaunchDisabled"
+          :title="relaunchDisabled ? '当前设备不可用，请先恢复连接或授权' : '重新启动这台设备的投屏'"
           @click="relaunch"
         >
           {{ device.connection === 'wireless' && device.presence === 'offline' ? '重连投屏' : '重新投屏' }}
@@ -91,10 +94,19 @@ async function relaunch() {
     </div>
 
     <div v-if="session" class="device-session-body">
-      <div class="metadata-grid compact">
-        <span>Serial</span><span class="mono">{{ session.serial }}</span>
-        <span>PID</span><span class="mono">{{ session.pid }}</span>
-        <span>连接</span><span>{{ session.connection === 'usb' ? 'USB' : '无线' }}</span>
+      <div class="session-detail-meta">
+        <div class="session-detail-item">
+          <span>Serial</span>
+          <strong class="mono">{{ session.serial }}</strong>
+        </div>
+        <div class="session-detail-item compact">
+          <span>PID</span>
+          <strong class="mono">{{ session.pid }}</strong>
+        </div>
+        <div class="session-detail-item compact">
+          <span>连接</span>
+          <strong>{{ session.connection === 'usb' ? 'USB' : '无线' }}</strong>
+        </div>
       </div>
       <div v-if="session.last_message" :class="['session-message', { error: failed }]">
         {{ session.last_message }}

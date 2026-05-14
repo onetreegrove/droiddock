@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import StatusChip from './StatusChip.vue';
+import { detailSecondaryItems } from '../domain/deviceDetail';
 import type { ManagedDevice } from '../types/app';
 
 const props = defineProps<{
@@ -14,10 +15,7 @@ const emit = defineEmits<{
 }>();
 
 const displayName = computed(() => props.device.alias || props.device.display_name || props.device.model || '未知设备');
-const networkLabel = computed(() => {
-  if (props.device.connection !== 'wireless') return null;
-  return props.device.endpoint || props.ipAddress || null;
-});
+const secondaryItems = computed(() => detailSecondaryItems(props.device, props.connectionLabel, props.ipAddress));
 const stateLabel = computed(() => {
   if (props.device.presence === 'offline') return '离线';
   if (props.device.state === 'device') return '可用';
@@ -50,7 +48,7 @@ const stateTone = computed(() => {
           stroke="currentColor"
           stroke-width="3"
         >
-          <path d="M12 2v20M2 12h20" />
+          <path d="M12 2v7M8 5h8M8 5v4a4 4 0 0 0 8 0V5M12 16v6" stroke-linecap="round" stroke-linejoin="round" />
         </svg>
         <svg v-else width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
           <path
@@ -79,15 +77,10 @@ const stateTone = computed(() => {
       </div>
 
       <div class="hero-secondary-row">
-        <span class="secondary-item">{{ device.model || '-' }}</span>
-        <span class="dot-separator">·</span>
-        <span class="secondary-item">{{ connectionLabel }}</span>
-        <template v-if="networkLabel">
-          <span class="dot-separator">·</span>
-          <span class="secondary-item mono">{{ networkLabel }}</span>
+        <template v-for="(item, index) in secondaryItems" :key="`${item}-${index}`">
+          <span v-if="index > 0" class="dot-separator">·</span>
+          <span class="secondary-item" :class="{ mono: index >= 2 }">{{ item }}</span>
         </template>
-        <span class="dot-separator">·</span>
-        <span class="secondary-item mono">{{ device.serial }}</span>
       </div>
     </div>
   </div>

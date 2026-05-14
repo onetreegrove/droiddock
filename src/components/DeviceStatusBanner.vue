@@ -1,54 +1,15 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import { statusBanner } from '../domain/deviceDetail';
 import { useUiStore } from '../stores/ui';
 import type { ManagedDevice } from '../types/app';
-
-type BannerTone = 'warn' | 'error';
-type BannerAction = 'reconnect' | null;
 
 const props = defineProps<{
   device: ManagedDevice;
 }>();
 
 const ui = useUiStore();
-
-const banner = computed<{
-  tone: BannerTone;
-  title: string;
-  message: string;
-  action: BannerAction;
-} | null>(() => {
-  if (props.device.presence === 'offline') {
-    if (props.device.connection === 'wireless') {
-      return {
-        tone: 'error',
-        title: '无线设备已离线',
-        message: props.device.endpoint
-          ? '手机无线调试端口可能已变化。可先重连恢复连接，或使用底部“重连投屏”继续启动。'
-          : '缺少保存的无线连接地址，请重新配对或通过 USB 转无线后再启动投屏。',
-        action: props.device.endpoint ? 'reconnect' : null,
-      };
-    }
-
-    return {
-      tone: 'error',
-      title: 'USB 设备已离线',
-      message: '请重新插入 USB 数据线，确认手机已解锁并允许 USB 调试，设备列表会自动刷新。',
-      action: null,
-    };
-  }
-
-  if (props.device.state === 'unauthorized') {
-    return {
-      tone: 'warn',
-      title: '设备待授权',
-      message: '请解锁手机，在 USB 调试授权弹窗中勾选“一律允许使用这台电脑进行调试”，然后点击允许。',
-      action: null,
-    };
-  }
-
-  return null;
-});
+const banner = computed(() => statusBanner(props.device));
 
 function handleReconnect() {
   if (!props.device.endpoint) return;
@@ -83,7 +44,7 @@ function handleReconnect() {
       <div class="banner-message">{{ banner.message }}</div>
     </div>
     <button v-if="banner.action === 'reconnect'" class="btn btn-ghost compact-button banner-btn" @click="handleReconnect">
-      重连
+      只恢复连接
     </button>
   </div>
 </template>
