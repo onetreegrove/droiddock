@@ -107,8 +107,11 @@ body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#1113
 .cmdprev{margin-top:10px;background:var(--bg);border:1px solid var(--border1);border-radius:7px;padding:9px 11px}
 .cmdlbl{font-size:9px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--t3);margin-bottom:4px}
 .cmdtxt{font-size:10px;color:var(--acc);word-break:break-all;line-height:1.6}
-.lbar{padding:14px 22px;border-top:1px solid var(--border1);display:flex;align-items:center;gap:12px}
-.launch-btn{padding:8px 20px;font-size:13px;font-weight:600}
+.sessioncard{border:1px solid var(--border1);border-radius:8px;background:var(--bg3);padding:12px 14px;margin-top:10px;display:grid;grid-template-columns:minmax(0,1fr) max-content;gap:12px;align-items:center}
+.sessiontitle{font-size:11px;font-weight:700;color:var(--t1)}
+.sessioncopy{font-size:11px;color:var(--t3);line-height:1.5;margin-top:6px}
+.session-actions{display:flex;align-items:center;gap:8px;justify-content:flex-end}
+.session-actions .btn{font-size:11px;padding:6px 12px}
 
 /* SESSIONS PAGE */
 .sgrid{flex:1;overflow-y:auto;padding:14px 22px;display:flex;flex-direction:column;gap:9px}
@@ -248,7 +251,7 @@ body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#1113
         <div class="dct">
           <div class="dic"><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><rect x="3.5" y="1.5" width="9" height="13" rx="1.5" stroke="currentColor" stroke-width="1.2"/><circle cx="8" cy="12" r=".8" fill="currentColor"/></svg></div>
           <div class="dinfo"><div class="dname">我的三星</div><div class="txs mono" style="color:var(--t3)">Samsung Galaxy S24</div></div>
-          <div class="dchips"><span class="chip g"><span class="dot g"></span>可用</span><span class="chip gr">USB</span></div>
+          <div class="dchips"><span class="chip g"><span class="dot g"></span>投屏中</span><span class="chip gr">USB</span></div>
         </div>
         <div class="dserial mono">R9YT301WXXX</div>
       </div>
@@ -312,6 +315,26 @@ body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#1113
       <div class="dsec">
         <div class="sechdr">
           <div>
+            <div class="sectitle" id="session-title">会话</div>
+          </div>
+          <span class="chip g" id="session-chip"><span class="dot g"></span>已连接</span>
+        </div>
+        <div class="sessioncard">
+          <div>
+            <div class="sessiontitle" id="session-card-title">可以开始投屏</div>
+            <div class="sessioncopy" id="launch-hint">设备已连接，确认下方参数后可直接启动投屏。</div>
+          </div>
+          <div class="session-actions">
+            <button class="btn btn-p" id="launch-btn" onclick="doLaunch()">
+              <svg width="12" height="12" viewBox="0 0 13 13" fill="none"><path d="M3 2L11 6.5L3 11V2Z" fill="currentColor"/></svg>
+              <span id="launch-label">启动投屏</span>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="dsec">
+        <div class="sechdr">
+          <div>
             <div class="sectitle">投屏参数</div>
             <div style="margin-top:3px" id="dd-paramsrc"><span class="chip gr" style="font-size:9px">使用全局默认</span></div>
           </div>
@@ -366,13 +389,6 @@ body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#1113
         </div>
       </div>
 
-      <div class="lbar">
-        <button class="btn btn-p launch-btn" id="launch-btn" onclick="doLaunch()">
-          <svg width="13" height="13" viewBox="0 0 13 13" fill="none"><path d="M3 2L11 6.5L3 11V2Z" fill="currentColor"/></svg>
-          <span id="launch-label">启动投屏</span>
-        </button>
-        <span id="launch-hint" class="tsm" style="color:var(--t3)"></span>
-      </div>
     </div>
   </div>
 </div>
@@ -627,7 +643,7 @@ body{font-family:'DM Sans','Segoe UI',sans-serif;font-size:13px;background:#1113
 <script>
 var activeToggles = {audio:true,awake:true};
 var devData = [
-  {name:'我的三星',model:'Samsung Galaxy S24',serial:'R9YT301WXXX',state:'device',conn:'USB',ip:'—',chipCls:'g',chipTxt:'可用'},
+  {name:'我的三星',model:'Samsung Galaxy S24',serial:'R9YT301WXXX',state:'device',conn:'USB',ip:'—',chipCls:'g',chipTxt:'投屏中'},
   {name:'谷歌 Pixel',model:'Pixel 8 Pro',serial:'192.168.1.105:5555',state:'offline',conn:'无线',ip:'192.168.1.105',chipCls:'gr',chipTxt:'离线'},
   {name:'Xiaomi 14',model:'Xiaomi 14',serial:'A1B2C3D4EEE',state:'unauthorized',conn:'USB',ip:'—',chipCls:'y',chipTxt:'待授权'}
 ];
@@ -654,11 +670,42 @@ function selDev(i) {
   var lb = document.getElementById('launch-btn');
   var ll = document.getElementById('launch-label');
   var lh = document.getElementById('launch-hint');
-  ll.textContent = d.state === 'offline' && d.conn === '无线' ? '重连投屏' : '启动投屏';
-  if(d.state === 'device') { lb.disabled = false; lh.textContent = ''; }
-  else if(d.state === 'unauthorized') { lb.disabled = true; lh.textContent = '请先在手机上允许 USB 调试授权'; }
-  else if(d.state === 'offline' && d.conn === '无线') { lb.disabled = false; lh.textContent = '确认无线调试地址后重连并启动投屏'; }
-  else if(d.state === 'offline') { lb.disabled = true; lh.textContent = '设备当前不在线，请先重连无线调试'; }
+  var st = document.getElementById('session-title');
+  var sc = document.getElementById('session-chip');
+  var sct = document.getElementById('session-card-title');
+  if(d.state === 'device') {
+    st.textContent = '会话';
+    sc.className = 'chip g';
+    sc.innerHTML = '<span class="dot g"></span>已连接';
+    sct.textContent = '可以开始投屏';
+    ll.textContent = '启动投屏';
+    lb.disabled = false;
+    lh.textContent = '设备已连接，确认下方参数后可直接启动投屏。';
+  } else if(d.state === 'unauthorized') {
+    st.textContent = '会话';
+    sc.className = 'chip y';
+    sc.innerHTML = '<span class="dot y"></span>待授权';
+    sct.textContent = '暂时不能投屏';
+    ll.textContent = '启动投屏';
+    lb.disabled = true;
+    lh.textContent = '请先在手机上允许 USB 调试授权，授权后再启动投屏。';
+  } else if(d.state === 'offline' && d.conn === '无线') {
+    st.textContent = '会话';
+    sc.className = 'chip gr';
+    sc.innerHTML = '<span class="dot gr"></span>未连接';
+    sct.textContent = '先恢复设备连接';
+    ll.textContent = '恢复连接';
+    lb.disabled = false;
+    lh.textContent = '设备当前不在线，可先恢复无线连接。恢复后再按需要启动投屏。';
+  } else {
+    st.textContent = '会话';
+    sc.className = 'chip gr';
+    sc.innerHTML = '<span class="dot gr"></span>未连接';
+    sct.textContent = '暂时不能投屏';
+    ll.textContent = '启动投屏';
+    lb.disabled = true;
+    lh.textContent = '请重新插入 USB 数据线，设备列表会自动刷新。';
+  }
   updateCmd();
 }
 

@@ -1,20 +1,13 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import { statusBanner } from '../domain/deviceDetail';
-import { useUiStore } from '../stores/ui';
 import type { ManagedDevice } from '../types/app';
 
 const props = defineProps<{
   device: ManagedDevice;
 }>();
 
-const ui = useUiStore();
 const banner = computed(() => statusBanner(props.device));
-
-function handleReconnect() {
-  if (!props.device.endpoint) return;
-  ui.openReconnectModal(props.device.serial, props.device.endpoint, props.device.wireless_source, false);
-}
 </script>
 
 <template>
@@ -43,9 +36,6 @@ function handleReconnect() {
       <div class="banner-title">{{ banner.title }}</div>
       <div class="banner-message">{{ banner.message }}</div>
     </div>
-    <button v-if="banner.action === 'reconnect'" class="btn btn-ghost compact-button banner-btn" @click="handleReconnect">
-      只恢复连接
-    </button>
   </div>
 </template>
 
@@ -93,19 +83,9 @@ function handleReconnect() {
   line-height: 1.5;
 }
 
-.banner-btn {
-  flex: 0 0 auto;
-  align-self: center;
-  color: inherit;
-}
-
 @media (max-width: 760px) {
   .status-banner {
     flex-wrap: wrap;
-  }
-
-  .banner-btn {
-    margin-left: 30px;
   }
 }
 </style>

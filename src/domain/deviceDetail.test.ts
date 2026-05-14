@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { ManagedDevice } from '../types/app';
 import {
+  canRestoreConnection,
   canRelaunchSession,
   detailSecondaryItems,
   launchAvailability,
@@ -31,18 +32,22 @@ describe('device detail presentation helpers', () => {
     expect(detailSecondaryItems(device(), 'ADB Pair 无线')).toEqual(['PFTM20', 'ADB Pair 无线', '10.128.0.151:41317']);
   });
 
-  it('shows guidance for adb offline devices that are still present in the live list', () => {
-    expect(statusBanner(device({ state: 'offline', presence: 'online' }))).toMatchObject({
-      tone: 'error',
-      title: '设备连接异常',
-      action: 'reconnect',
+  it('keeps recoverable connection issues inside the session action area', () => {
+    expect(statusBanner(device({ presence: 'offline' }))).toBeNull();
+    expect(statusBanner(device({ state: 'offline', presence: 'online' }))).toBeNull();
+  });
+
+  it('still shows the top banner for device authorization guidance', () => {
+    expect(statusBanner(device({ state: 'unauthorized', connection: 'usb', endpoint: null }))).toMatchObject({
+      tone: 'warn',
+      title: '设备待授权',
     });
   });
 
   it('keeps session relaunch eligibility aligned with the primary launch action', () => {
     expect(canRelaunchSession(device({ state: 'unauthorized', connection: 'usb', endpoint: null }))).toBe(false);
     expect(canRelaunchSession(device({ presence: 'offline', endpoint: null }))).toBe(false);
-    expect(canRelaunchSession(device({ presence: 'offline', endpoint: '10.128.0.151:41317' }))).toBe(true);
+    expect(canRelaunchSession(device({ presence: 'offline', endpoint: '10.128.0.151:41317' }))).toBe(false);
     expect(canRelaunchSession(device(), false)).toBe(false);
   });
 
@@ -54,12 +59,20 @@ describe('device detail presentation helpers', () => {
     });
   });
 
-  it('labels reconnect-and-launch as a reconnect step instead of ready', () => {
+  it('does not treat offline wireless devices as launch-ready', () => {
     expect(launchAvailability(device({ presence: 'offline' }), false, true)).toMatchObject({
-      canLaunch: true,
-      reconnectAndLaunch: true,
-      title: '需要先重连',
-      buttonText: '重连投屏',
+      canLaunch: false,
+      title: '暂不能启动',
+      buttonText: '启动投屏',
+      hint: '请先恢复无线连接',
     });
+  });
+
+  it('allows restoring wireless connections without launching', () => {
+    expect(canRestoreConnection(device({ presence: 'offline' }), true)).toBe(true);
+    expect(canRestoreConnection(device({ state: 'offline', presence: 'online' }), true)).toBe(true);
+    expect(canRestoreConnection(device({ presence: 'offline', endpoint: null }), true)).toBe(false);
+    expect(canRestoreConnection(device({ connection: 'usb', presence: 'offline', endpoint: null }), true)).toBe(false);
+    expect(canRestoreConnection(device({ presence: 'offline' }), false)).toBe(false);
   });
 });

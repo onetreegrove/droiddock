@@ -27,10 +27,6 @@ const isMirroring = computed(() => displaySession.value?.status === 'running');
 const ipAddress = computed(() => (device.value ? deviceIpAddress(device.value.serial) : null));
 const command = computed(() => (device.value ? buildScrcpyCommand(device.value.serial, editorOptions.value) : 'scrcpy'));
 const launchState = computed(() => launchAvailability(device.value, isMirroring.value, store.isToolsReady));
-const canLaunch = computed(() => launchState.value.canLaunch);
-const canReconnectAndLaunch = computed(() => launchState.value.reconnectAndLaunch);
-const launchButtonText = computed(() => launchState.value.buttonText);
-const launchHint = computed(() => launchState.value.hint);
 const connectionLabel = computed(() => {
   if (!device.value) return '-';
   if (device.value.connection === 'usb') return 'USB';
@@ -73,10 +69,6 @@ async function resetToGlobal() {
 
 async function launch() {
   if (!device.value) return;
-  if (canReconnectAndLaunch.value && device.value.endpoint) {
-    ui.openReconnectModal(device.value.serial, device.value.endpoint, device.value.wireless_source, true);
-    return;
-  }
   store.sessionDraftOptions[device.value.serial] = { ...editorOptions.value };
   await store.startMirror(device.value.serial, editorOptions.value);
 }
@@ -111,7 +103,7 @@ async function saveAlias() {
       />
       <DeviceStatusBanner :device="device" />
     </div>
-    <DeviceSessionPanel :device="device" :session="displaySession" />
+    <DeviceSessionPanel :device="device" :session="displaySession" :launch-state="launchState" @launch="launch" />
     <section class="detail-section">
       <div class="section-head">
         <div>
@@ -129,18 +121,6 @@ async function saveAlias() {
       <ParameterEditor v-model:options="editorOptions" variant="device" />
       <CommandPreview :command="command" />
     </section>
-    <footer class="launch-bar" :class="{ disabled: !canLaunch }">
-      <div class="launch-copy">
-        <div class="launch-title">{{ launchState.title }}</div>
-        <div class="launch-hint">{{ launchHint || '将使用当前参数启动独立 scrcpy 投屏窗口' }}</div>
-      </div>
-      <button class="btn btn-primary launch-button" :disabled="!canLaunch" :title="launchHint || launchButtonText" @click="launch">
-        <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
-          <path d="M3 2L11 6.5L3 11V2Z" fill="currentColor" />
-        </svg>
-        {{ launchButtonText }}
-      </button>
-    </footer>
     <div v-if="aliasModalOpen" class="modal-overlay" @click.self="aliasModalOpen = false">
       <form class="modal-card alias-modal" @submit.prevent="saveAlias">
         <header class="modal-header">

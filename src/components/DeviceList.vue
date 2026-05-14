@@ -63,11 +63,20 @@ function mirrorLabel(device: ManagedDevice) {
   return '';
 }
 
-function mirrorTone(device: ManagedDevice): 'green' | 'yellow' | 'red' | 'gray' {
+function mirrorTone(device: ManagedDevice): 'green' | 'yellow' | 'red' | 'gray' | null {
   const session = mirrorSession(device);
   if (session?.status === 'running') return 'green';
   if (session?.status === 'failed') return 'red';
-  return 'gray';
+  if (session?.status === 'stopped') return 'gray';
+  return null;
+}
+
+function primaryStatusLabel(device: ManagedDevice) {
+  return mirrorLabel(device) || presenceLabel(device);
+}
+
+function primaryStatusTone(device: ManagedDevice): 'green' | 'yellow' | 'red' | 'gray' {
+  return mirrorTone(device) || presenceTone(device);
 }
 
 function requestForgetDevice(device: ManagedDevice) {
@@ -109,9 +118,8 @@ async function confirmForgetDevice() {
             <div class="device-model mono">{{ device.model || device.product || device.serial }}</div>
           </div>
           <div class="device-chips">
-            <StatusChip :tone="presenceTone(device)" :label="presenceLabel(device)" dot />
+            <StatusChip :tone="primaryStatusTone(device)" :label="primaryStatusLabel(device)" dot />
             <StatusChip tone="gray" :label="connectionLabel(device)" />
-            <StatusChip v-if="mirrorLabel(device)" :tone="mirrorTone(device)" :label="mirrorLabel(device)" dot />
           </div>
         </div>
         <div v-if="connectionHint(device)" class="device-warning">

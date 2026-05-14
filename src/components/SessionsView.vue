@@ -1,14 +1,19 @@
 <script setup lang="ts">
 import { computed } from 'vue';
 import AppHeader from './AppHeader.vue';
-import LogPanel from './LogPanel.vue';
 import SessionCard from './SessionCard.vue';
+import SessionLogModal from './SessionLogModal.vue';
 import { useAppStore } from '../stores/app';
 import { useUiStore } from '../stores/ui';
 
 const store = useAppStore();
 const ui = useUiStore();
 const runningCount = computed(() => store.sessions.filter((session) => session.status === 'running').length);
+const selectedLogSession = computed(() => store.sessions.find((session) => session.session_id === ui.selectedLogSessionId) ?? null);
+
+function closeLogModal() {
+  ui.selectedLogSessionId = null;
+}
 </script>
 
 <template>
@@ -27,12 +32,14 @@ const runningCount = computed(() => store.sessions.filter((session) => session.s
     <div class="session-list">
       <div v-for="session in store.sessions" :key="session.session_id" class="session-stack">
         <SessionCard :session="session" show-device-action />
-        <LogPanel
-          v-if="ui.selectedLogSessionId === session.session_id"
-          :lines="store.sessionLogs[session.session_id] ?? []"
-        />
       </div>
       <div v-if="store.sessions.length === 0" class="empty-panel">暂无投屏会话，请到设备页选择设备并启动投屏。</div>
     </div>
+    <SessionLogModal
+      v-if="selectedLogSession"
+      :session="selectedLogSession"
+      :lines="store.sessionLogs[selectedLogSession.session_id] ?? []"
+      @close="closeLogModal"
+    />
   </section>
 </template>

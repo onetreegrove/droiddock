@@ -47,7 +47,7 @@ const running = computed(() => props.session.status === 'running');
           </svg>
           重连
         </button>
-        <button class="btn btn-ghost icon-button" :aria-label="ui.selectedLogSessionId === session.session_id ? '收起日志' : '日志'" @click="store.openSessionLogs(session.session_id)">
+        <button class="btn btn-ghost icon-button" aria-label="查看日志" @click="store.openSessionLogs(session.session_id)">
           <svg width="13" height="13" viewBox="0 0 13 13" fill="none" aria-hidden="true">
             <rect x="1.5" y="1.5" width="10" height="10" rx="1.5" stroke="currentColor" stroke-width="1.1" />
             <path d="M4 5h5M4 7h4" stroke="currentColor" stroke-width="1" stroke-linecap="round" />
