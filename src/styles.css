@@ -427,8 +427,7 @@ button {
   gap: 10px;
 }
 
-.device-icon,
-.hero-icon {
+.device-icon {
   border-radius: 10px;
   display: grid;
   place-items: center;
@@ -549,40 +548,6 @@ button {
   border-bottom: 1px solid var(--border1);
 }
 
-.device-hero {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  margin-bottom: 16px;
-}
-
-.hero-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
-  background: var(--acc-d);
-  border: 1px solid rgba(61, 217, 235, 0.25);
-  color: var(--acc);
-}
-
-.device-hero-info {
-  flex: 1;
-  min-width: 0;
-}
-
-.hero-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.hero-title {
-  margin-bottom: 0;
-  font-size: 18px;
-  font-weight: 600;
-}
-
 .btn-icon-sm {
   width: 24px;
   height: 24px;
@@ -599,28 +564,6 @@ button {
 .btn-icon-sm:hover {
   background: var(--bg5);
   color: var(--t1);
-}
-
-.hero-chips {
-  display: flex;
-  gap: 8px;
-}
-
-.metadata-grid {
-  display: grid;
-  grid-template-columns: 80px 1fr;
-  gap: 6px 16px;
-  color: var(--t2);
-  font-size: 13px;
-}
-
-.metadata-grid.compact {
-  grid-template-columns: max-content minmax(0, 1fr);
-}
-
-.metadata-grid span:nth-child(odd) {
-  color: var(--t3);
-  font-size: 12px;
 }
 
 .detail-section {

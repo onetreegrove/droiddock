@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue';
 import CommandPreview from './CommandPreview.vue';
+import DeviceHero from './DeviceHero.vue';
 import DeviceSessionPanel from './DeviceSessionPanel.vue';
+import DeviceStatusBanner from './DeviceStatusBanner.vue';
 import ParameterEditor from './ParameterEditor.vue';
 import StatusChip from './StatusChip.vue';
 import { buildScrcpyCommand, presetLabels, presetOptions } from '../domain/scrcpyOptions';
@@ -94,48 +96,13 @@ async function handleEditAlias() {
 <template>
   <section v-if="device" class="device-detail">
     <div class="device-hero-block">
-      <div class="device-hero">
-        <div class="hero-icon">
-          <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-            <rect x="3.5" y="1.5" width="13" height="17" rx="2.5" stroke="currentColor" stroke-width="1.3" />
-            <circle cx="10" cy="15.5" r="1.2" fill="currentColor" />
-            <rect x="6.5" y="4" width="7" height="1" rx=".5" fill="currentColor" opacity=".4" />
-          </svg>
-        </div>
-        <div class="device-hero-info">
-          <div class="hero-title-row">
-            <div class="hero-title">{{ device.alias || device.display_name || device.model || '未知设备' }}</div>
-            <button class="btn-icon-sm" title="编辑别名" @click="handleEditAlias">
-              <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
-                <path d="M2.5 11.5v-2l6-6 2 2-6 6h-2zM9.5 2.5l2 2" stroke="currentColor" stroke-width="1.2" stroke-linecap="round"/>
-              </svg>
-            </button>
-          </div>
-          <div class="hero-chips">
-            <StatusChip
-              :tone="device.state === 'device' ? 'green' : device.state === 'unauthorized' ? 'yellow' : 'red'"
-              :label="device.presence === 'offline' ? '离线' : device.state === 'device' ? '可用' : device.state === 'unauthorized' ? '待授权' : '离线'"
-              dot
-            />
-            <StatusChip tone="gray" :label="connectionLabel" />
-          </div>
-        </div>
-      </div>
-      <div v-if="device.presence === 'offline'" class="device-warning">
-        {{ device.connection === 'wireless' ? '设备当前不在线，可先重连无线调试。' : '设备当前不在线，插入 USB 后会自动刷新。' }}
-        <button
-          v-if="device.connection === 'wireless' && device.endpoint"
-          class="btn btn-ghost compact-button"
-          @click.stop="ui.openReconnectModal(device.serial, device.endpoint, device.wireless_source)"
-        >
-          重连
-        </button>
-      </div>
-      <div class="metadata-grid">
-        <span>Serial</span><span class="mono">{{ device.serial }}</span>
-        <span>型号</span><span>{{ device.model || '-' }}</span>
-        <span>IP</span><span class="mono">{{ ipAddress || '-' }}</span>
-      </div>
+      <DeviceHero
+        :device="device"
+        :ip-address="ipAddress"
+        :connection-label="connectionLabel"
+        @edit-alias="handleEditAlias"
+      />
+      <DeviceStatusBanner :device="device" />
     </div>
     <DeviceSessionPanel :device="device" :session="displaySession" />
     <section class="detail-section">
