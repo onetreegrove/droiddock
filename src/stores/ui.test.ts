@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 import { useUiStore } from './ui';
 
@@ -34,5 +34,15 @@ describe('ui store reconnect modal', () => {
 
     expect(ui.modal).toBe('reconnect');
     expect(ui.reconnectLaunchAfterConnect).toBe(true);
+  });
+
+  it('uses unique toast ids when multiple toasts are pushed in the same millisecond', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const ui = useUiStore();
+
+    ui.pushToast('第一条');
+    ui.pushToast('第二条');
+
+    expect(new Set(ui.toasts.map((toast) => toast.id)).size).toBe(2);
   });
 });

@@ -1,6 +1,8 @@
 import { defineStore } from 'pinia';
 import type { ModalKey, PageKey, WirelessSource } from '../types/app';
 
+let nextToastId = 1;
+
 export const useUiStore = defineStore('ui', {
   state: () => ({
     currentPage: 'devices' as PageKey,
@@ -11,6 +13,7 @@ export const useUiStore = defineStore('ui', {
     reconnectEndpoint: null as string | null,
     reconnectSource: 'manual' as WirelessSource,
     reconnectLaunchAfterConnect: false,
+    toasts: [] as { id: number; message: string; type: 'success' | 'error' | 'info' }[],
   }),
   actions: {
     openPage(page: PageKey) {
@@ -39,6 +42,17 @@ export const useUiStore = defineStore('ui', {
     },
     toggleLogSession(sessionId: string) {
       this.selectedLogSessionId = this.selectedLogSessionId === sessionId ? null : sessionId;
+    },
+    pushToast(message: string, type: 'success' | 'error' | 'info' = 'success', duration = 3000) {
+      const id = nextToastId;
+      nextToastId += 1;
+      this.toasts.push({ id, message, type });
+      setTimeout(() => {
+        this.removeToast(id);
+      }, duration);
+    },
+    removeToast(id: number) {
+      this.toasts = this.toasts.filter((t) => t.id !== id);
     },
   },
 });

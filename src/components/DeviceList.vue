@@ -59,7 +59,6 @@ function mirrorLabel(device: ManagedDevice) {
   if (!session) return '';
   if (session.status === 'running') return '投屏中';
   if (session.status === 'failed') return '投屏失败';
-  if (session.status === 'stopped') return '最近停止';
   return '';
 }
 
@@ -67,7 +66,6 @@ function mirrorTone(device: ManagedDevice): 'green' | 'yellow' | 'red' | 'gray' 
   const session = mirrorSession(device);
   if (session?.status === 'running') return 'green';
   if (session?.status === 'failed') return 'red';
-  if (session?.status === 'stopped') return 'gray';
   return null;
 }
 

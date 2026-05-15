@@ -13,6 +13,7 @@ import ConfirmModal from './components/ConfirmModal.vue';
 import PairModal from './components/PairModal.vue';
 import ReconnectModal from './components/ReconnectModal.vue';
 import WirelessModal from './components/WirelessModal.vue';
+import ToastNotification from './components/ToastNotification.vue';
 import { useAppStore } from './stores/app';
 import { useUiStore } from './stores/ui';
 
@@ -124,5 +125,6 @@ onUnmounted(() => {
     <PairModal v-if="ui.modal === 'pair'" />
     <WirelessModal v-if="ui.modal === 'wireless'" />
     <ReconnectModal v-if="ui.modal === 'reconnect'" />
+    <ToastNotification />
   </main>
 </template>
