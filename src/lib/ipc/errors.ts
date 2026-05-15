@@ -33,3 +33,11 @@ export function normalizeIpcError(error: unknown): AppErrorPayload {
     retryable: false,
   };
 }
+
+export function errorUserMessage(error: unknown): string {
+  if (typeof error === 'object' && error !== null && 'userMessage' in error) {
+    return String((error as AppErrorPayload).userMessage);
+  }
+
+  return String(error instanceof Error ? error.message : error);
+}

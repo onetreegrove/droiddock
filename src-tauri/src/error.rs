@@ -87,6 +87,16 @@ pub fn translate_command_error(stdout: &str, stderr: &str) -> AppError {
         )
         .with_detail(detail)
         .retryable()
+    } else if text.contains("failed to connect")
+        || text.contains("unable to connect")
+        || text.contains("cannot connect")
+    {
+        AppError::new(
+            AppErrorCode::WirelessPortUnavailable,
+            "无线调试连接失败，请检查 IP、端口、手机无线调试状态和当前网络",
+        )
+        .with_detail(detail)
+        .retryable()
     } else if text.contains("failed to authenticate") {
         AppError::new(AppErrorCode::PairFailed, "配对失败，请重新生成配对码后再试")
             .with_detail(detail)
@@ -133,5 +143,20 @@ mod tests {
             error.technical_detail.as_deref(),
             Some("some low level failure")
         );
+    }
+
+    #[test]
+    fn translates_adb_connect_failure_with_success_exit_code_output() {
+        let error = translate_command_error(
+            "failed to connect to '192.168.1.10:39407': Operation timed out",
+            "",
+        );
+
+        assert_eq!(error.code, AppErrorCode::WirelessPortUnavailable);
+        assert_eq!(
+            error.user_message,
+            "无线调试连接失败，请检查 IP、端口、手机无线调试状态和当前网络"
+        );
+        assert!(error.retryable);
     }
 }

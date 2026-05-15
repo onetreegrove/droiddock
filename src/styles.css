@@ -1280,14 +1280,45 @@ button {
   line-height: 1.5;
 }
 
+.modal-feedback-slot {
+  min-height: 40px;
+}
+
+.modal-feedback,
 .modal-error {
   border: 1px solid rgba(248, 113, 113, 0.25);
   border-radius: 10px;
   padding: 10px 14px;
-  background: var(--red-d);
-  color: var(--red);
   font-size: 13px;
   line-height: 1.4;
+}
+
+.modal-error,
+.modal-feedback-error {
+  background: var(--red-d);
+  color: var(--red);
+}
+
+.modal-success {
+  border: 1px solid rgba(74, 222, 128, 0.25);
+  border-radius: 10px;
+  padding: 10px 14px;
+  background: var(--green-d);
+  color: var(--green);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.modal-feedback-success {
+  border-color: rgba(74, 222, 128, 0.25);
+  background: var(--green-d);
+  color: var(--green);
+}
+
+.modal-feedback-info {
+  border-color: rgba(61, 217, 235, 0.25);
+  background: var(--acc-d);
+  color: var(--acc);
 }
 
 .modal-body {

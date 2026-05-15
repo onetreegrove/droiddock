@@ -9,6 +9,7 @@ import StatusChip from './StatusChip.vue';
 import { launchAvailability } from '../domain/deviceDetail';
 import { buildScrcpyCommand, presetLabels, presetOptions } from '../domain/scrcpyOptions';
 import { deviceIpAddress, wirelessSourceLabel } from '../domain/wireless';
+import { errorUserMessage } from '../lib/ipc/errors';
 import type { PresetId, ScrcpyOptions } from '../types/app';
 import { useAppStore } from '../stores/app';
 import { useUiStore } from '../stores/ui';
@@ -87,7 +88,7 @@ async function saveAlias() {
     await store.saveDeviceAlias(device.value.serial, aliasDraft.value.trim() || null);
     aliasModalOpen.value = false;
   } catch (error) {
-    aliasError.value = String(error instanceof Error ? error.message : error);
+    aliasError.value = errorUserMessage(error);
   }
 }
 </script>

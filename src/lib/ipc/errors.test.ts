@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { normalizeIpcError } from './errors';
+import { errorUserMessage, normalizeIpcError } from './errors';
 
 describe('normalizeIpcError', () => {
   it('normalizes a backend structured error', () => {
@@ -25,5 +25,16 @@ describe('normalizeIpcError', () => {
       technicalDetail: 'adb not found',
       retryable: false,
     });
+  });
+
+  it('extracts the user message from normalized errors for UI display', () => {
+    expect(
+      errorUserMessage({
+        code: 'wireless_port_unavailable',
+        userMessage: '无线调试端口不可用，请检查 IP、端口和手机无线调试是否开启',
+        technicalDetail: 'failed to connect',
+        retryable: true,
+      }),
+    ).toBe('无线调试端口不可用，请检查 IP、端口和手机无线调试是否开启');
   });
 });

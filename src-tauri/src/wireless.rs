@@ -4,6 +4,7 @@ use std::time::Duration;
 use crate::{
     command::{run_command_with_input_timeout, run_command_with_timeout, CommandResult},
     config::{AppConfig, DeviceConnection, DeviceRecord, WirelessSource},
+    error::translate_command_error,
 };
 
 const DEFAULT_TCPIP_PORT: u16 = 5555;
@@ -96,13 +97,10 @@ pub(crate) fn adb_connect_with_adb(
     }
 
     let result = run_command_with_timeout(adb, &["connect", &endpoint], Duration::from_secs(15));
-    if result.ok {
-        remember_endpoint(config, endpoint.clone());
-        remember_wireless_device(config, endpoint, source, previous_endpoint, now);
-        Ok(result)
-    } else {
-        Err(result.message)
-    }
+    validate_adb_connect_result(&result)?;
+    remember_endpoint(config, endpoint.clone());
+    remember_wireless_device(config, endpoint, source, previous_endpoint, now);
+    Ok(result)
 }
 
 pub(crate) fn adb_disconnect_with_adb(
@@ -148,9 +146,7 @@ pub(crate) fn adb_pair_with_adb(
             &["connect", &connect_endpoint],
             Duration::from_secs(15),
         );
-        if !connect_result.ok {
-            return Err(connect_result.message);
-        }
+        validate_adb_connect_result(&connect_result)?;
 
         remember_endpoint(config, connect_endpoint.clone());
         remember_wireless_device(config, connect_endpoint, WirelessSource::AdbPair, None, now);
@@ -170,9 +166,62 @@ pub(crate) fn adb_pair_with_adb(
     }
 }
 
+fn validate_adb_connect_result(result: &CommandResult) -> Result<(), String> {
+    let detail = format!("{}\n{}", result.stdout, result.stderr);
+    let text = detail.to_lowercase();
+    let connected = text.contains("connected to") || text.contains("already connected to");
+
+    if result.ok && connected {
+        Ok(())
+    } else {
+        Err(translate_command_error(&result.stdout, &result.stderr).user_message)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn command_result(ok: bool, stdout: &str, stderr: &str) -> CommandResult {
+        CommandResult {
+            ok,
+            code: Some(if ok { 0 } else { 1 }),
+            stdout: stdout.to_string(),
+            stderr: stderr.to_string(),
+            message: stdout.trim().to_string(),
+        }
+    }
+
+    #[test]
+    fn adb_connect_output_accepts_connected_messages() {
+        assert!(validate_adb_connect_result(&command_result(
+            true,
+            "connected to 192.168.1.10:39407\n",
+            ""
+        ))
+        .is_ok());
+        assert!(validate_adb_connect_result(&command_result(
+            true,
+            "already connected to 192.168.1.10:39407\n",
+            ""
+        ))
+        .is_ok());
+    }
+
+    #[test]
+    fn adb_connect_output_rejects_failed_message_with_success_exit_code() {
+        let error = validate_adb_connect_result(&command_result(
+            true,
+            "failed to connect to '192.168.1.10:39407': Connection refused\n",
+            "",
+        ))
+        .unwrap_err();
+
+        assert_eq!(
+            error,
+            "无线调试端口不可用，请检查 IP、端口和手机无线调试是否开启"
+        );
+    }
 
     #[test]
     fn remember_endpoint_deduplicates_and_caps_recent_list() {

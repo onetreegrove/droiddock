@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
+import { buildConnectEndpoint } from '../domain/wireless';
+import { errorUserMessage } from '../lib/ipc/errors';
 import { useAppStore } from '../stores/app';
 import { useUiStore } from '../stores/ui';
-import { buildConnectEndpoint } from '../domain/wireless';
 
 const store = useAppStore();
 const ui = useUiStore();
@@ -20,7 +21,7 @@ async function submit() {
     await store.adbConnect(buildConnectEndpoint(host.value, port.value || '5555'), 'usb_tcpip');
     ui.closeModal();
   } catch (error) {
-    errorMessage.value = String(error instanceof Error ? error.message : error);
+    errorMessage.value = errorUserMessage(error);
   }
 }
 </script>

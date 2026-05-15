@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref } from 'vue';
+import { buildPairRequest } from '../domain/wireless';
+import { errorUserMessage } from '../lib/ipc/errors';
 import { useAppStore } from '../stores/app';
 import { useUiStore } from '../stores/ui';
-import { buildPairRequest } from '../domain/wireless';
 
 const store = useAppStore();
 const ui = useUiStore();
@@ -46,7 +47,7 @@ async function submit() {
     connectHostEdited.value = false;
     ui.closeModal();
   } catch (error) {
-    errorMessage.value = String(error instanceof Error ? error.message : error);
+    errorMessage.value = errorUserMessage(error);
   }
 }
 </script>

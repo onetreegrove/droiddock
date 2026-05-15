@@ -3,7 +3,7 @@ import { defineStore } from 'pinia';
 import type { PresetId, ScrcpyOptions, WirelessSource } from '../types/app';
 import type { PairRequest } from '../lib/ipc/types';
 import { defaultScrcpyOptions, mergeScrcpyOptions } from '../domain/scrcpyOptions';
-import type { AppErrorPayload } from '../lib/ipc/errors';
+import { errorUserMessage } from '../lib/ipc/errors';
 import { invokeCommand } from '../lib/ipc/client';
 import { useConfigStore } from './config';
 import { useDevicesStore } from './devices';
@@ -24,10 +24,7 @@ type BusyKey =
   | 'settings';
 
 function errorMessage(error: unknown): string {
-  if (typeof error === 'object' && error !== null && 'userMessage' in error) {
-    return String((error as AppErrorPayload).userMessage);
-  }
-  return String(error);
+  return errorUserMessage(error);
 }
 
 export const useAppStore = defineStore('app', () => {
