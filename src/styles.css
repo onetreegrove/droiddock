@@ -1072,6 +1072,15 @@ button {
   margin-top: 6px;
 }
 
+.tool-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
 .compact-button {
   min-height: 28px;
   padding: 4px 12px;
@@ -1091,6 +1100,23 @@ button {
   word-break: break-all;
 }
 
+.tool-message {
+  margin-top: 8px;
+  color: var(--t2);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.setup-error {
+  margin-bottom: 12px;
+  border: 1px solid rgba(248, 113, 113, 0.3);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--red-d);
+  color: var(--red);
+  font-size: 13px;
+}
+
 .install-panel {
   display: flex;
   align-items: center;
@@ -1099,6 +1125,27 @@ button {
   margin-top: 12px;
   padding: 18px;
   border-color: var(--border2);
+}
+
+.install-log {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+  border: 1px solid var(--border1);
+  border-radius: 10px;
+  padding: 12px 16px;
+  background: var(--bg3);
+}
+
+.install-log-title {
+  color: var(--t2);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.install-log-line {
+  color: var(--t3);
+  overflow-wrap: anywhere;
 }
 
 .source-panel {

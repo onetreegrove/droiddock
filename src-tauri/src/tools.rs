@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     fs,
     os::unix::fs::PermissionsExt,
@@ -13,16 +13,58 @@ use crate::{
     tool_manifest::DEFAULT_TOOL_MANIFEST,
 };
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ToolKind {
+    Adb,
+    Scrcpy,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ToolSource {
+    Configured,
+    Bundled,
+    AndroidSdk,
+    LocalBin,
+    Homebrew,
+    SystemPath,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ToolHealth {
+    Ready,
+    Missing,
+    NotExecutable,
+    WrongTool,
+    VersionFailed,
+    IncompatibleArch,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq, Eq)]
+pub(crate) struct ToolDiagnostic {
+    pub(crate) kind: ToolKind,
+    pub(crate) path: Option<String>,
+    pub(crate) source: Option<ToolSource>,
+    pub(crate) version: Option<String>,
+    pub(crate) arch: Option<String>,
+    pub(crate) health: ToolHealth,
+    pub(crate) message: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
 pub(crate) struct ToolStatus {
-    pub(crate) adb_path: Option<String>,
-    pub(crate) scrcpy_path: Option<String>,
-    pub(crate) adb_version: Option<String>,
-    pub(crate) scrcpy_version: Option<String>,
-    pub(crate) adb_arch: Option<String>,
-    pub(crate) scrcpy_arch: Option<String>,
+    pub(crate) adb: ToolDiagnostic,
+    pub(crate) scrcpy: ToolDiagnostic,
     pub(crate) adb_ok: bool,
     pub(crate) scrcpy_ok: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct ToolCandidate {
+    path: String,
+    source: ToolSource,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -42,56 +84,107 @@ pub(crate) fn validate_executable(path: &str) -> bool {
             .unwrap_or(false)
 }
 
-fn tool_candidates(name: &str, config: &AppConfig) -> Vec<String> {
-    let mut candidates = Vec::new();
-
-    match name {
-        "adb" => {
-            if let Some(path) = &config.adb_path {
-                candidates.push(path.clone());
-            }
-            if let Ok(home) = std::env::var("HOME") {
-                candidates.push(format!("{home}/Library/Android/sdk/platform-tools/adb"));
-                candidates.push(format!(
-                    "{home}/Library/Application Support/DroidDock/tools/platform-tools/adb"
-                ));
-            }
-            candidates.push("/opt/homebrew/bin/adb".to_string());
-            candidates.push("/usr/local/bin/adb".to_string());
-        }
-        "scrcpy" => {
-            if let Some(path) = &config.scrcpy_path {
-                candidates.push(path.clone());
-            }
-            if let Ok(home) = std::env::var("HOME") {
-                candidates.push(format!("{home}/.local/bin/scrcpy"));
-                candidates.push(format!(
-                    "{home}/Library/Application Support/DroidDock/tools/scrcpy/scrcpy"
-                ));
-            }
-            candidates.push("/opt/homebrew/bin/scrcpy".to_string());
-            candidates.push("/usr/local/bin/scrcpy".to_string());
-        }
-        _ => {}
+fn tool_name(kind: ToolKind) -> &'static str {
+    match kind {
+        ToolKind::Adb => "adb",
+        ToolKind::Scrcpy => "scrcpy",
     }
-
-    candidates
 }
 
-pub(crate) fn resolve_tool(name: &str, config: &AppConfig) -> Option<String> {
-    for candidate in tool_candidates(name, config) {
-        if validate_executable(&candidate) {
-            return Some(candidate);
-        }
+fn tool_kind_from_name(name: &str) -> Option<ToolKind> {
+    match name {
+        "adb" => Some(ToolKind::Adb),
+        "scrcpy" => Some(ToolKind::Scrcpy),
+        _ => None,
     }
+}
 
+fn which_candidate(name: &str) -> Option<ToolCandidate> {
     let output = Command::new("/usr/bin/which").arg(name).output().ok()?;
     if !output.status.success() {
         return None;
     }
 
     let path = String::from_utf8(output.stdout).ok()?.trim().to_string();
-    validate_executable(&path).then_some(path)
+    (!path.is_empty()).then_some(ToolCandidate {
+        path,
+        source: ToolSource::SystemPath,
+    })
+}
+
+fn tool_candidates(kind: ToolKind, config: &AppConfig) -> Vec<ToolCandidate> {
+    let mut candidates = Vec::new();
+
+    match kind {
+        ToolKind::Adb => {
+            if let Some(path) = &config.adb_path {
+                candidates.push(ToolCandidate {
+                    path: path.clone(),
+                    source: ToolSource::Configured,
+                });
+            }
+            if let Ok(home) = std::env::var("HOME") {
+                candidates.push(ToolCandidate {
+                    path: format!(
+                        "{home}/Library/Application Support/DroidDock/tools/platform-tools/adb"
+                    ),
+                    source: ToolSource::Bundled,
+                });
+                candidates.push(ToolCandidate {
+                    path: format!("{home}/Library/Android/sdk/platform-tools/adb"),
+                    source: ToolSource::AndroidSdk,
+                });
+            }
+            candidates.push(ToolCandidate {
+                path: "/opt/homebrew/bin/adb".to_string(),
+                source: ToolSource::Homebrew,
+            });
+            candidates.push(ToolCandidate {
+                path: "/usr/local/bin/adb".to_string(),
+                source: ToolSource::Homebrew,
+            });
+        }
+        ToolKind::Scrcpy => {
+            if let Some(path) = &config.scrcpy_path {
+                candidates.push(ToolCandidate {
+                    path: path.clone(),
+                    source: ToolSource::Configured,
+                });
+            }
+            if let Ok(home) = std::env::var("HOME") {
+                candidates.push(ToolCandidate {
+                    path: format!(
+                        "{home}/Library/Application Support/DroidDock/tools/scrcpy/scrcpy"
+                    ),
+                    source: ToolSource::Bundled,
+                });
+                candidates.push(ToolCandidate {
+                    path: format!("{home}/.local/bin/scrcpy"),
+                    source: ToolSource::LocalBin,
+                });
+            }
+            candidates.push(ToolCandidate {
+                path: "/opt/homebrew/bin/scrcpy".to_string(),
+                source: ToolSource::Homebrew,
+            });
+            candidates.push(ToolCandidate {
+                path: "/usr/local/bin/scrcpy".to_string(),
+                source: ToolSource::Homebrew,
+            });
+        }
+    }
+
+    if let Some(candidate) = which_candidate(tool_name(kind)) {
+        candidates.push(candidate);
+    }
+
+    candidates
+}
+
+pub(crate) fn resolve_tool(name: &str, config: &AppConfig) -> Option<String> {
+    let kind = tool_kind_from_name(name)?;
+    let diagnostic = diagnose_tool(kind, config);
+    (diagnostic.health == ToolHealth::Ready).then_some(diagnostic.path?)
 }
 
 fn is_apple_silicon_compatible_file_output(output: &str) -> bool {
@@ -105,6 +198,205 @@ fn is_apple_silicon_compatible_file_output(output: &str) -> bool {
 fn executable_arch(path: &str) -> Option<String> {
     let result = run_command("/usr/bin/file", &[path]);
     result.ok.then_some(result.stdout.trim().to_string())
+}
+
+fn version_args(kind: ToolKind) -> &'static [&'static str] {
+    match kind {
+        ToolKind::Adb => &["version"],
+        ToolKind::Scrcpy => &["--version"],
+    }
+}
+
+fn parsed_version(kind: ToolKind, stdout: String) -> Option<String> {
+    match kind {
+        ToolKind::Adb => second_line(Some(stdout)),
+        ToolKind::Scrcpy => first_line(Some(stdout)),
+    }
+}
+
+fn command_identifies_tool(kind: ToolKind, stdout: &str) -> bool {
+    let stdout = stdout.to_ascii_lowercase();
+    match kind {
+        ToolKind::Adb => stdout.contains("android debug bridge"),
+        ToolKind::Scrcpy => stdout.contains("scrcpy"),
+    }
+}
+
+fn diagnostic(
+    kind: ToolKind,
+    candidate: Option<&ToolCandidate>,
+    version: Option<String>,
+    arch: Option<String>,
+    health: ToolHealth,
+    message: impl Into<String>,
+) -> ToolDiagnostic {
+    ToolDiagnostic {
+        kind,
+        path: candidate.map(|candidate| candidate.path.clone()),
+        source: candidate.map(|candidate| candidate.source.clone()),
+        version,
+        arch,
+        health,
+        message: message.into(),
+    }
+}
+
+fn host_support_diagnostic_for_arch(kind: ToolKind, arch: &str) -> Option<ToolDiagnostic> {
+    (arch != "aarch64").then(|| ToolDiagnostic {
+        kind,
+        path: None,
+        source: None,
+        version: None,
+        arch: Some(arch.to_string()),
+        health: ToolHealth::IncompatibleArch,
+        message: "当前版本仅支持 Apple Silicon Mac，暂不支持 Intel Mac".to_string(),
+    })
+}
+
+fn host_support_diagnostic(kind: ToolKind) -> Option<ToolDiagnostic> {
+    host_support_diagnostic_for_arch(kind, std::env::consts::ARCH)
+}
+
+fn missing_diagnostic(kind: ToolKind) -> ToolDiagnostic {
+    let name = tool_name(kind);
+    ToolDiagnostic {
+        kind,
+        path: None,
+        source: None,
+        version: None,
+        arch: None,
+        health: ToolHealth::Missing,
+        message: format!("未找到 {name}，请自动安装或手动选择路径"),
+    }
+}
+
+fn diagnose_candidate(kind: ToolKind, candidate: &ToolCandidate) -> ToolDiagnostic {
+    let name = tool_name(kind);
+    let path = Path::new(&candidate.path);
+    if !path.exists() {
+        return diagnostic(
+            kind,
+            Some(candidate),
+            None,
+            None,
+            ToolHealth::Missing,
+            format!("{name} 路径不存在"),
+        );
+    }
+
+    let arch = executable_arch(&candidate.path);
+    if !validate_executable(&candidate.path) {
+        return diagnostic(
+            kind,
+            Some(candidate),
+            None,
+            arch,
+            ToolHealth::NotExecutable,
+            format!("{name} 文件不可执行"),
+        );
+    }
+
+    if !arch
+        .as_deref()
+        .map(is_apple_silicon_compatible_file_output)
+        .unwrap_or(false)
+    {
+        return diagnostic(
+            kind,
+            Some(candidate),
+            None,
+            arch,
+            ToolHealth::IncompatibleArch,
+            "当前工具不适合 Apple Silicon，请选择 arm64 或 universal 版本",
+        );
+    }
+
+    let version_result = run_command(&candidate.path, version_args(kind));
+    if !version_result.ok {
+        return diagnostic(
+            kind,
+            Some(candidate),
+            None,
+            arch,
+            ToolHealth::VersionFailed,
+            format!("{name} 无法运行版本检查"),
+        );
+    }
+
+    if !command_identifies_tool(kind, &version_result.stdout) {
+        return diagnostic(
+            kind,
+            Some(candidate),
+            parsed_version(kind, version_result.stdout),
+            arch,
+            ToolHealth::WrongTool,
+            format!("选择的文件不是可用的 {name}"),
+        );
+    }
+
+    diagnostic(
+        kind,
+        Some(candidate),
+        parsed_version(kind, version_result.stdout),
+        arch,
+        ToolHealth::Ready,
+        "工具可用",
+    )
+}
+
+pub(crate) fn diagnose_configured_tool_path(kind: ToolKind, path: &str) -> ToolDiagnostic {
+    diagnose_candidate(
+        kind,
+        &ToolCandidate {
+            path: path.to_string(),
+            source: ToolSource::Configured,
+        },
+    )
+}
+
+fn select_final_tool_diagnostic(
+    kind: ToolKind,
+    diagnostics: Vec<ToolDiagnostic>,
+) -> ToolDiagnostic {
+    if let Some(diagnostic) = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.health == ToolHealth::Ready)
+    {
+        return diagnostic.clone();
+    }
+
+    if let Some(diagnostic) = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.source == Some(ToolSource::Configured))
+    {
+        return diagnostic.clone();
+    }
+
+    if let Some(diagnostic) = diagnostics
+        .iter()
+        .find(|diagnostic| diagnostic.health != ToolHealth::Missing)
+    {
+        return diagnostic.clone();
+    }
+
+    missing_diagnostic(kind)
+}
+
+fn diagnose_tool(kind: ToolKind, config: &AppConfig) -> ToolDiagnostic {
+    if let Some(diagnostic) = host_support_diagnostic(kind) {
+        return diagnostic;
+    }
+
+    let mut diagnostics = Vec::new();
+    for candidate in tool_candidates(kind, config) {
+        let diagnostic = diagnose_candidate(kind, &candidate);
+        if diagnostic.health == ToolHealth::Ready {
+            return diagnostic;
+        }
+        diagnostics.push(diagnostic);
+    }
+
+    select_final_tool_diagnostic(kind, diagnostics)
 }
 
 fn download_file(url: &str, target: &Path) -> Result<(), String> {
@@ -161,6 +453,28 @@ fn file_sha256(path: &Path) -> Result<String, String> {
         .next()
         .unwrap_or_default()
         .to_string())
+}
+
+fn verify_sha256(path: &Path, expected: &str) -> Result<String, String> {
+    let expected = expected.trim();
+    if expected.is_empty() {
+        #[cfg(debug_assertions)]
+        {
+            return file_sha256(path);
+        }
+
+        #[cfg(not(debug_assertions))]
+        {
+            return Err("工具下载清单缺少 sha256，已停止安装以保护安全".to_string());
+        }
+    }
+
+    let actual = file_sha256(path)?;
+    if actual.eq_ignore_ascii_case(expected) {
+        Ok(actual)
+    } else {
+        Err("下载文件校验失败，请重新安装或稍后再试".to_string())
+    }
 }
 
 fn copy_dir_recursive(source: &Path, target: &Path) -> Result<(), String> {
@@ -238,8 +552,20 @@ fn install_platform_tools(
     let archive = temp_dir.join("platform-tools.zip");
     let unzip_dir = temp_dir.join("platform-tools-unzip");
     logs.push("下载 Android SDK Platform Tools".to_string());
-    download_file(DEFAULT_TOOL_MANIFEST.platform_tools_url, &archive)?;
-    logs.push(format!("platform-tools sha256 {}", file_sha256(&archive)?));
+    download_file(DEFAULT_TOOL_MANIFEST.platform_tools.url, &archive)?;
+    if cfg!(debug_assertions)
+        && DEFAULT_TOOL_MANIFEST
+            .platform_tools
+            .sha256
+            .trim()
+            .is_empty()
+    {
+        logs.push("开发模式：platform-tools 缺少 sha256，已跳过强校验".to_string());
+    }
+    logs.push(format!(
+        "platform-tools sha256 {}",
+        verify_sha256(&archive, DEFAULT_TOOL_MANIFEST.platform_tools.sha256)?
+    ));
     unzip_archive(&archive, &unzip_dir)?;
 
     let source = unzip_dir.join("platform-tools");
@@ -276,6 +602,10 @@ fn install_scrcpy(
     logs.push("下载 scrcpy macOS Apple Silicon 包".to_string());
     download_file(&url, &archive)?;
     logs.push(format!("scrcpy sha256 {}", file_sha256(&archive)?));
+    logs.push(
+        "scrcpy 当前使用 GitHub latest 下载源；固定版本 sha256 校验将在 manifest 固定下载 URL 后启用"
+            .to_string(),
+    );
     extract_archive(&archive, &unzip_dir)?;
 
     let scrcpy_bin = find_file_named(&unzip_dir, "scrcpy")
@@ -302,44 +632,18 @@ fn second_line(text: Option<String>) -> Option<String> {
 }
 
 pub(crate) fn get_tool_status_for_config(config: &AppConfig) -> Result<ToolStatus, String> {
-    let adb_path = resolve_tool("adb", config);
-    let scrcpy_path = resolve_tool("scrcpy", config);
-    let adb_version = adb_path
-        .as_deref()
-        .map(|path| run_command(path, &["version"]))
-        .and_then(|result| result.ok.then_some(result.stdout))
-        .and_then(|text| second_line(Some(text)));
-    let adb_arch = adb_path.as_deref().and_then(executable_arch);
-    let scrcpy_version = scrcpy_path
-        .as_deref()
-        .map(|path| run_command(path, &["--version"]))
-        .and_then(|result| result.ok.then_some(result.stdout))
-        .and_then(|text| first_line(Some(text)));
-    let scrcpy_arch = scrcpy_path.as_deref().and_then(executable_arch);
-    let adb_arch_ok = adb_arch
-        .as_deref()
-        .map(is_apple_silicon_compatible_file_output)
-        .unwrap_or(false);
-    let scrcpy_arch_ok = scrcpy_arch
-        .as_deref()
-        .map(is_apple_silicon_compatible_file_output)
-        .unwrap_or(false);
+    let adb = diagnose_tool(ToolKind::Adb, config);
+    let scrcpy = diagnose_tool(ToolKind::Scrcpy, config);
 
     Ok(ToolStatus {
-        adb_ok: adb_version.is_some() && adb_arch_ok,
-        scrcpy_ok: scrcpy_version.is_some() && scrcpy_arch_ok,
-        adb_path,
-        scrcpy_path,
-        adb_version,
-        scrcpy_version,
-        adb_arch,
-        scrcpy_arch,
+        adb_ok: adb.health == ToolHealth::Ready,
+        scrcpy_ok: scrcpy.health == ToolHealth::Ready,
+        adb,
+        scrcpy,
     })
 }
 
-pub(crate) fn install_tools_into_config(
-    config: &mut AppConfig,
-) -> Result<ToolInstallResult, String> {
+pub(crate) fn install_tools_into_config() -> Result<ToolInstallResult, String> {
     let dir = tools_dir()?;
     let temp_dir = config_dir()?.join("install-tmp");
     if temp_dir.exists() {
@@ -352,9 +656,6 @@ pub(crate) fn install_tools_into_config(
     let adb_path = install_platform_tools(&mut logs, &temp_dir, &dir)?;
     let scrcpy_path = install_scrcpy(&mut logs, &temp_dir, &dir)?;
     let _ = fs::remove_dir_all(&temp_dir);
-
-    config.adb_path = Some(adb_path.clone());
-    config.scrcpy_path = Some(scrcpy_path.clone());
 
     logs.push("工具安装完成".to_string());
     Ok(ToolInstallResult {
@@ -375,6 +676,36 @@ mod tests {
         fs::set_permissions(&path, fs::Permissions::from_mode(0o644)).unwrap();
 
         assert!(!validate_executable(path.to_str().unwrap()));
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    #[cfg(debug_assertions)]
+    fn verify_sha256_allows_empty_manifest_hash_in_debug() {
+        let path =
+            std::env::temp_dir().join(format!("droiddock-test-empty-hash-{}", crate::now_secs()));
+        fs::write(&path, "payload").unwrap();
+
+        let hash = verify_sha256(&path, "").unwrap();
+
+        assert_eq!(
+            hash,
+            "239f59ed55e737c77147cf55ad0c1b030b6d7ee748a7426952f9b852d5a935e5"
+        );
+
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn verify_sha256_rejects_wrong_hash() {
+        let path =
+            std::env::temp_dir().join(format!("droiddock-test-wrong-hash-{}", crate::now_secs()));
+        fs::write(&path, "payload").unwrap();
+
+        let error = verify_sha256(&path, "000000").unwrap_err();
+
+        assert!(error.contains("校验失败"));
 
         let _ = fs::remove_file(path);
     }
@@ -422,5 +753,118 @@ mod tests {
         assert!(!is_apple_silicon_compatible_file_output(
             "Mach-O 64-bit executable x86_64"
         ));
+    }
+
+    #[test]
+    fn missing_tool_diagnostic_has_actionable_message() {
+        let diagnostic = missing_diagnostic(ToolKind::Adb);
+
+        assert_eq!(diagnostic.health, ToolHealth::Missing);
+        assert_eq!(diagnostic.message, "未找到 adb，请自动安装或手动选择路径");
+    }
+
+    #[test]
+    fn configured_path_diagnostic_reports_exact_selected_path() {
+        let diagnostic = diagnose_configured_tool_path(ToolKind::Adb, "/tmp/droiddock-missing-adb");
+
+        assert_eq!(
+            diagnostic.path.as_deref(),
+            Some("/tmp/droiddock-missing-adb")
+        );
+        assert_eq!(diagnostic.source, Some(ToolSource::Configured));
+        assert_eq!(diagnostic.health, ToolHealth::Missing);
+        assert_eq!(diagnostic.message, "adb 路径不存在");
+    }
+
+    #[test]
+    fn final_diagnostic_collapses_auto_discovered_missing_failures() {
+        let diagnostic = select_final_tool_diagnostic(
+            ToolKind::Adb,
+            vec![
+                diagnostic(
+                    ToolKind::Adb,
+                    Some(&ToolCandidate {
+                        path: "/tmp/droiddock-bundled-missing-adb".to_string(),
+                        source: ToolSource::Bundled,
+                    }),
+                    None,
+                    None,
+                    ToolHealth::Missing,
+                    "adb 路径不存在",
+                ),
+                diagnostic(
+                    ToolKind::Adb,
+                    Some(&ToolCandidate {
+                        path: "/opt/homebrew/bin/adb".to_string(),
+                        source: ToolSource::Homebrew,
+                    }),
+                    None,
+                    None,
+                    ToolHealth::Missing,
+                    "adb 路径不存在",
+                ),
+            ],
+        );
+
+        assert_eq!(diagnostic.health, ToolHealth::Missing);
+        assert_eq!(diagnostic.path, None);
+        assert_eq!(diagnostic.source, None);
+        assert_eq!(diagnostic.message, "未找到 adb，请自动安装或手动选择路径");
+    }
+
+    #[test]
+    fn final_diagnostic_preserves_configured_missing_failure() {
+        let diagnostic = select_final_tool_diagnostic(
+            ToolKind::Adb,
+            vec![
+                diagnostic(
+                    ToolKind::Adb,
+                    Some(&ToolCandidate {
+                        path: "/tmp/user-selected-adb".to_string(),
+                        source: ToolSource::Configured,
+                    }),
+                    None,
+                    None,
+                    ToolHealth::Missing,
+                    "adb 路径不存在",
+                ),
+                diagnostic(
+                    ToolKind::Adb,
+                    Some(&ToolCandidate {
+                        path: "/opt/homebrew/bin/adb".to_string(),
+                        source: ToolSource::Homebrew,
+                    }),
+                    None,
+                    None,
+                    ToolHealth::Missing,
+                    "adb 路径不存在",
+                ),
+            ],
+        );
+
+        assert_eq!(diagnostic.path.as_deref(), Some("/tmp/user-selected-adb"));
+        assert_eq!(diagnostic.source, Some(ToolSource::Configured));
+        assert_eq!(diagnostic.health, ToolHealth::Missing);
+        assert_eq!(diagnostic.message, "adb 路径不存在");
+    }
+
+    #[test]
+    fn apple_silicon_arch_parser_rejects_x86_64() {
+        assert!(!is_apple_silicon_compatible_file_output(
+            "Mach-O 64-bit executable x86_64"
+        ));
+    }
+
+    #[test]
+    fn unsupported_host_arch_has_product_level_message() {
+        let diagnostic = host_support_diagnostic_for_arch(ToolKind::Scrcpy, "x86_64").unwrap();
+
+        assert_eq!(diagnostic.kind, ToolKind::Scrcpy);
+        assert_eq!(diagnostic.health, ToolHealth::IncompatibleArch);
+        assert_eq!(diagnostic.arch.as_deref(), Some("x86_64"));
+        assert_eq!(
+            diagnostic.message,
+            "当前版本仅支持 Apple Silicon Mac，暂不支持 Intel Mac"
+        );
     }
 }

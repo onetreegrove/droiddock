@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import type { PresetId, ScrcpyOptions, WirelessSource } from '../types/app';
-import type { PairRequest } from '../lib/ipc/types';
+import type { PairRequest, ToolKind } from '../lib/ipc/types';
 import { defaultScrcpyOptions, mergeScrcpyOptions } from '../domain/scrcpyOptions';
 import { errorUserMessage } from '../lib/ipc/errors';
 import { invokeCommand } from '../lib/ipc/client';
@@ -146,16 +146,38 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  async function setToolPath(tool: 'adb' | 'scrcpy', path: string) {
+  async function fetchToolStatusStrict() {
     setBusy('tools', true);
     try {
-      const adbPath = tool === 'adb' ? path : (config.appConfig?.adb_path ?? tools.toolStatus?.adb_path ?? null);
-      const scrcpyPath = tool === 'scrcpy' ? path : (config.appConfig?.scrcpy_path ?? tools.toolStatus?.scrcpy_path ?? null);
-      await config.setToolPaths(adbPath, scrcpyPath);
-      await fetchToolStatus();
+      await tools.fetchToolStatus();
+    } catch (error) {
+      log(`工具检查失败: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      setBusy('tools', false);
+    }
+  }
+
+  async function setToolPath(tool: ToolKind, path: string) {
+    setBusy('tools', true);
+    try {
+      config.appConfig = await tools.setToolPath(tool, path);
       log(`已更新 ${tool} 路径`);
     } catch (error) {
       log(`更新工具路径失败: ${errorMessage(error)}`);
+      throw error;
+    } finally {
+      setBusy('tools', false);
+    }
+  }
+
+  async function clearToolPath(tool: ToolKind) {
+    setBusy('tools', true);
+    try {
+      config.appConfig = await tools.clearToolPath(tool);
+      log(`已清除 ${tool} 路径`);
+    } catch (error) {
+      log(`清除工具路径失败: ${errorMessage(error)}`);
       throw error;
     } finally {
       setBusy('tools', false);
@@ -167,8 +189,25 @@ export const useAppStore = defineStore('app', () => {
     try {
       const result = await tools.installTools();
       log(result.logs.join(' / '));
-      await fetchAppConfig();
-      await fetchToolStatus();
+      setBusy('config', true);
+      try {
+        await config.fetchAppConfig();
+      } catch (error) {
+        log(`读取配置失败: ${errorMessage(error)}`);
+        throw error;
+      } finally {
+        setBusy('config', false);
+      }
+
+      setBusy('tools', true);
+      try {
+        await tools.fetchToolStatus();
+      } catch (error) {
+        log(`工具检查失败: ${errorMessage(error)}`);
+        throw error;
+      } finally {
+        setBusy('tools', false);
+      }
       return result;
     } catch (error) {
       log(`自动安装失败: ${errorMessage(error)}`);
@@ -366,7 +405,9 @@ export const useAppStore = defineStore('app', () => {
     saveDeviceOptions,
     clearDeviceOptions,
     fetchToolStatus,
+    fetchToolStatusStrict,
     setToolPath,
+    clearToolPath,
     installTools,
     refreshDevices,
     refreshSessions,

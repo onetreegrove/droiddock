@@ -18,14 +18,15 @@ use std::{
 };
 use tauri::{AppHandle, State};
 use tools::{
-    get_tool_status_for_config, install_tools_into_config, resolve_tool, validate_executable,
-    ToolInstallResult, ToolStatus,
+    diagnose_configured_tool_path, get_tool_status_for_config, install_tools_into_config,
+    resolve_tool, ToolHealth, ToolInstallResult, ToolKind, ToolStatus,
 };
 use wireless::PairRequest;
 
 #[derive(Debug, Default)]
 struct AppState {
     config: Mutex<AppConfig>,
+    install: Mutex<()>,
     sessions: SessionManager,
 }
 
@@ -75,13 +76,15 @@ fn set_tool_paths(
     scrcpy_path: Option<String>,
 ) -> Result<AppConfig, String> {
     if let Some(path) = &adb_path {
-        if !validate_executable(path) {
-            return Err("adb 路径不存在或不可执行".to_string());
+        let diagnostic = diagnose_configured_tool_path(ToolKind::Adb, path);
+        if diagnostic.health != ToolHealth::Ready {
+            return Err(diagnostic.message);
         }
     }
     if let Some(path) = &scrcpy_path {
-        if !validate_executable(path) {
-            return Err("scrcpy 路径不存在或不可执行".to_string());
+        let diagnostic = diagnose_configured_tool_path(ToolKind::Scrcpy, path);
+        if diagnostic.health != ToolHealth::Ready {
+            return Err(diagnostic.message);
         }
     }
 
@@ -93,6 +96,55 @@ fn set_tool_paths(
     config.scrcpy_path = scrcpy_path;
     save_config_atomic(&config)?;
 
+    Ok(config.clone())
+}
+
+#[tauri::command]
+fn set_tool_path(
+    state: State<'_, AppState>,
+    tool: String,
+    path: String,
+) -> Result<AppConfig, String> {
+    let mut config = state
+        .config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_string())?;
+
+    let kind = match tool.as_str() {
+        "adb" => ToolKind::Adb,
+        "scrcpy" => ToolKind::Scrcpy,
+        _ => return Err("未知工具类型".to_string()),
+    };
+
+    let diagnostic = diagnose_configured_tool_path(kind, &path);
+
+    if diagnostic.health != ToolHealth::Ready {
+        return Err(diagnostic.message);
+    }
+
+    match kind {
+        ToolKind::Adb => config.adb_path = Some(path),
+        ToolKind::Scrcpy => config.scrcpy_path = Some(path),
+    }
+
+    save_config_atomic(&config)?;
+    Ok(config.clone())
+}
+
+#[tauri::command]
+fn clear_tool_path(state: State<'_, AppState>, tool: String) -> Result<AppConfig, String> {
+    let mut config = state
+        .config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_string())?;
+
+    match tool.as_str() {
+        "adb" => config.adb_path = None,
+        "scrcpy" => config.scrcpy_path = None,
+        _ => return Err("未知工具类型".to_string()),
+    }
+
+    save_config_atomic(&config)?;
     Ok(config.clone())
 }
 
@@ -204,11 +256,18 @@ fn get_tool_status(state: State<'_, AppState>) -> Result<ToolStatus, String> {
 
 #[tauri::command]
 fn install_tools(state: State<'_, AppState>) -> Result<ToolInstallResult, String> {
+    let _install_guard = state
+        .install
+        .lock()
+        .map_err(|_| "工具安装状态异常，请重启 DroidDock 后重试".to_string())?;
+    let result = install_tools_into_config()?;
+
     let mut config = state
         .config
         .lock()
         .map_err(|_| "config lock poisoned".to_string())?;
-    let result = install_tools_into_config(&mut config)?;
+    config.adb_path = Some(result.adb_path.clone());
+    config.scrcpy_path = Some(result.scrcpy_path.clone());
     save_config_atomic(&config)?;
 
     Ok(result)
@@ -339,11 +398,14 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
             config: Mutex::new(load_config()),
+            install: Mutex::new(()),
             sessions: SessionManager::default(),
         })
         .invoke_handler(tauri::generate_handler![
             get_app_config,
             set_tool_paths,
+            set_tool_path,
+            clear_tool_path,
             save_device_alias,
             save_default_scrcpy_options,
             save_device_scrcpy_options,

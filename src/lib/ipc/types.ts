@@ -1,12 +1,36 @@
 import type { PresetId, ScrcpyOptions } from '../../types/app';
 
+export type ToolKind = 'adb' | 'scrcpy';
+
+export type ToolSource =
+  | 'configured'
+  | 'bundled'
+  | 'android_sdk'
+  | 'local_bin'
+  | 'homebrew'
+  | 'system_path';
+
+export type ToolHealth =
+  | 'ready'
+  | 'missing'
+  | 'not_executable'
+  | 'wrong_tool'
+  | 'version_failed'
+  | 'incompatible_arch';
+
+export type ToolDiagnostic = {
+  kind: ToolKind;
+  path: string | null;
+  source: ToolSource | null;
+  version: string | null;
+  arch: string | null;
+  health: ToolHealth;
+  message: string;
+};
+
 export type ToolStatus = {
-  adb_path: string | null;
-  scrcpy_path: string | null;
-  adb_version: string | null;
-  scrcpy_version: string | null;
-  adb_arch: string | null;
-  scrcpy_arch: string | null;
+  adb: ToolDiagnostic;
+  scrcpy: ToolDiagnostic;
   adb_ok: boolean;
   scrcpy_ok: boolean;
 };
