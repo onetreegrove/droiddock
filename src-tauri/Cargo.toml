@@ -1,6 +1,6 @@
 [package]
 name = "droiddock"
-version = "0.1.3"
+version = "0.2.0"
 description = "macOS Apple Silicon Android screen mirroring and control console."
 authors = ["DroidDock"]
 license = "MIT"
