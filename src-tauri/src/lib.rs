@@ -13,20 +13,21 @@ use config::{load_config, save_config_atomic, AppConfig, DeviceOptionEntry, Wire
 use scrcpy::{build_scrcpy_args, ScrcpyOptions};
 use sessions::{SessionInfo, SessionLogLine, SessionManager};
 use std::{
-    sync::Mutex,
+    sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Emitter, State};
 use tools::{
     diagnose_configured_tool_path, get_tool_status_for_config, install_tools_into_config,
-    resolve_tool, ToolHealth, ToolInstallResult, ToolKind, ToolStatus,
+    resolve_tool, ToolHealth, ToolInstallProgress, ToolInstallResult, ToolInstallTarget, ToolKind,
+    ToolStatus,
 };
 use wireless::PairRequest;
 
 #[derive(Debug, Default)]
 struct AppState {
-    config: Mutex<AppConfig>,
-    install: Mutex<()>,
+    config: Arc<Mutex<AppConfig>>,
+    install: Arc<Mutex<()>>,
     sessions: SessionManager,
 }
 
@@ -255,22 +256,51 @@ fn get_tool_status(state: State<'_, AppState>) -> Result<ToolStatus, String> {
 }
 
 #[tauri::command]
-fn install_tools(state: State<'_, AppState>) -> Result<ToolInstallResult, String> {
-    let _install_guard = state
-        .install
-        .lock()
-        .map_err(|_| "工具安装状态异常，请重启 DroidDock 后重试".to_string())?;
-    let result = install_tools_into_config()?;
+async fn install_tools(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    target: ToolInstallTarget,
+) -> Result<ToolInstallResult, String> {
+    let install = Arc::clone(&state.install);
+    let config = Arc::clone(&state.config);
+    tauri::async_runtime::spawn_blocking(move || {
+        let _install_guard = install
+            .lock()
+            .map_err(|_| "工具安装状态异常，请重启 DroidDock 后重试".to_string())?;
+        let event_app = app.clone();
+        let result = install_tools_into_config(target, move |progress| {
+            let _ = event_app.emit("tool-install-progress", progress);
+        });
 
-    let mut config = state
-        .config
-        .lock()
-        .map_err(|_| "config lock poisoned".to_string())?;
-    config.adb_path = Some(result.adb_path.clone());
-    config.scrcpy_path = Some(result.scrcpy_path.clone());
-    save_config_atomic(&config)?;
-
-    Ok(result)
+        match result {
+            Ok(result) => {
+                let mut config = config
+                    .lock()
+                    .map_err(|_| "config lock poisoned".to_string())?;
+                if let Some(path) = &result.adb_path {
+                    config.adb_path = Some(path.clone());
+                }
+                if let Some(path) = &result.scrcpy_path {
+                    config.scrcpy_path = Some(path.clone());
+                }
+                save_config_atomic(&config)?;
+                Ok(result)
+            }
+            Err(error) => {
+                let _ = app.emit(
+                    "tool-install-progress",
+                    ToolInstallProgress {
+                        target,
+                        level: "error",
+                        message: error.clone(),
+                    },
+                );
+                Err(error)
+            }
+        }
+    })
+    .await
+    .map_err(|error| error.to_string())?
 }
 
 #[tauri::command]
@@ -397,8 +427,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState {
-            config: Mutex::new(load_config()),
-            install: Mutex::new(()),
+            config: Arc::new(Mutex::new(load_config())),
+            install: Arc::new(Mutex::new(())),
             sessions: SessionManager::default(),
         })
         .invoke_handler(tauri::generate_handler![

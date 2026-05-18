@@ -4,14 +4,19 @@ use std::{
     os::unix::fs::PermissionsExt,
     path::{Path, PathBuf},
     process::Command,
+    time::Duration,
 };
 
 use crate::{
     command::run_command,
     command::run_required,
+    command::run_required_with_timeout,
     config::{config_dir, tools_dir, AppConfig},
     tool_manifest::DEFAULT_TOOL_MANIFEST,
 };
+
+const TOOL_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(180);
+const SCRCPY_RELEASE_QUERY_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -69,9 +74,35 @@ struct ToolCandidate {
 
 #[derive(Debug, Clone, Serialize)]
 pub(crate) struct ToolInstallResult {
-    pub(crate) adb_path: String,
-    pub(crate) scrcpy_path: String,
+    pub(crate) target: ToolInstallTarget,
+    pub(crate) adb_path: Option<String>,
+    pub(crate) scrcpy_path: Option<String>,
     pub(crate) logs: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub(crate) enum ToolInstallTarget {
+    Adb,
+    Scrcpy,
+    All,
+}
+
+impl ToolInstallTarget {
+    pub(crate) fn kinds(self) -> Vec<ToolKind> {
+        match self {
+            ToolInstallTarget::Adb => vec![ToolKind::Adb],
+            ToolInstallTarget::Scrcpy => vec![ToolKind::Scrcpy],
+            ToolInstallTarget::All => vec![ToolKind::Adb, ToolKind::Scrcpy],
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub(crate) struct ToolInstallProgress {
+    pub(crate) target: ToolInstallTarget,
+    pub(crate) level: &'static str,
+    pub(crate) message: String,
 }
 
 pub(crate) fn validate_executable(path: &str) -> bool {
@@ -403,7 +434,22 @@ fn download_file(url: &str, target: &Path) -> Result<(), String> {
     let target = target
         .to_str()
         .ok_or_else(|| "download target path is not valid UTF-8".to_string())?;
-    run_required("/usr/bin/curl", &["-fL", "--retry", "3", "-o", target, url])
+    run_required_with_timeout(
+        "/usr/bin/curl",
+        &[
+            "-fL",
+            "--connect-timeout",
+            "15",
+            "--max-time",
+            "180",
+            "--retry",
+            "3",
+            "-o",
+            target,
+            url,
+        ],
+        TOOL_DOWNLOAD_TIMEOUT,
+    )
         .map_err(|error| error.user_message)?;
     Ok(())
 }
@@ -544,14 +590,36 @@ fn find_scrcpy_macos_aarch64_asset(payload: &str) -> Result<String, String> {
         .ok_or_else(|| "未找到 scrcpy macOS Apple Silicon 下载包".to_string())
 }
 
-fn install_platform_tools(
+fn push_install_log(
+    target: ToolInstallTarget,
     logs: &mut Vec<String>,
+    emit_progress: &mut impl FnMut(ToolInstallProgress),
+    message: impl Into<String>,
+) {
+    let message = message.into();
+    logs.push(message.clone());
+    emit_progress(ToolInstallProgress {
+        target,
+        level: "info",
+        message,
+    });
+}
+
+fn install_platform_tools(
+    target: ToolInstallTarget,
+    logs: &mut Vec<String>,
+    emit_progress: &mut impl FnMut(ToolInstallProgress),
     temp_dir: &Path,
     tools_dir: &Path,
 ) -> Result<String, String> {
     let archive = temp_dir.join("platform-tools.zip");
     let unzip_dir = temp_dir.join("platform-tools-unzip");
-    logs.push("下载 Android SDK Platform Tools".to_string());
+    push_install_log(
+        target,
+        logs,
+        emit_progress,
+        "下载 Android SDK Platform Tools",
+    );
     download_file(DEFAULT_TOOL_MANIFEST.platform_tools.url, &archive)?;
     if cfg!(debug_assertions)
         && DEFAULT_TOOL_MANIFEST
@@ -560,52 +628,84 @@ fn install_platform_tools(
             .trim()
             .is_empty()
     {
-        logs.push("开发模式：platform-tools 缺少 sha256，已跳过强校验".to_string());
+        push_install_log(
+            target,
+            logs,
+            emit_progress,
+            "开发模式：platform-tools 缺少 sha256，已跳过强校验",
+        );
     }
-    logs.push(format!(
-        "platform-tools sha256 {}",
-        verify_sha256(&archive, DEFAULT_TOOL_MANIFEST.platform_tools.sha256)?
-    ));
+    let sha256 = verify_sha256(&archive, DEFAULT_TOOL_MANIFEST.platform_tools.sha256)?;
+    push_install_log(
+        target,
+        logs,
+        emit_progress,
+        format!("platform-tools sha256 {sha256}"),
+    );
+    push_install_log(target, logs, emit_progress, "解压 Android SDK Platform Tools");
     unzip_archive(&archive, &unzip_dir)?;
 
     let source = unzip_dir.join("platform-tools");
-    let target = tools_dir.join("platform-tools");
-    copy_dir_recursive(&source, &target)?;
-    let adb = target.join("adb");
+    let target_dir = tools_dir.join("platform-tools");
+    copy_dir_recursive(&source, &target_dir)?;
+    let adb = target_dir.join("adb");
     fs::set_permissions(&adb, fs::Permissions::from_mode(0o755))
         .map_err(|error| error.to_string())?;
     let adb_path = adb.to_string_lossy().to_string();
     run_required(&adb_path, &["version"]).map_err(|error| error.user_message)?;
+    push_install_log(target, logs, emit_progress, "adb 安装并验证完成");
     Ok(adb_path)
 }
 
 fn install_scrcpy(
+    target: ToolInstallTarget,
     logs: &mut Vec<String>,
+    emit_progress: &mut impl FnMut(ToolInstallProgress),
     temp_dir: &Path,
     tools_dir: &Path,
 ) -> Result<String, String> {
-    logs.push("查询 scrcpy 最新 macOS Apple Silicon 版本".to_string());
-    let api_result = run_required(
+    push_install_log(
+        target,
+        logs,
+        emit_progress,
+        "查询 scrcpy 最新 macOS Apple Silicon 版本",
+    );
+    let api_result = run_required_with_timeout(
         "/usr/bin/curl",
         &[
             "-fsSL",
+            "--connect-timeout",
+            "15",
+            "--max-time",
+            "30",
             "-H",
             "Accept: application/vnd.github+json",
             DEFAULT_TOOL_MANIFEST.scrcpy_release_api,
         ],
+        SCRCPY_RELEASE_QUERY_TIMEOUT,
     )
     .map_err(|error| error.user_message)?;
     let url = find_scrcpy_macos_aarch64_asset(&api_result.stdout)?;
     let archive_name = url.rsplit('/').next().unwrap_or("scrcpy-download");
     let archive = temp_dir.join(archive_name);
     let unzip_dir = temp_dir.join("scrcpy-unzip");
-    logs.push("下载 scrcpy macOS Apple Silicon 包".to_string());
+    push_install_log(
+        target,
+        logs,
+        emit_progress,
+        "下载 scrcpy macOS Apple Silicon 包",
+    );
     download_file(&url, &archive)?;
-    logs.push(format!("scrcpy sha256 {}", file_sha256(&archive)?));
-    logs.push(
+    let sha256 = file_sha256(&archive)?;
+    push_install_log(target, logs, emit_progress, format!("scrcpy sha256 {sha256}"));
+    push_install_log(
+        target,
+        logs,
+        emit_progress,
         "scrcpy 当前使用 GitHub latest 下载源；固定版本 sha256 校验将在 manifest 固定下载 URL 后启用"
             .to_string(),
     );
+    push_install_log(target, logs, emit_progress, "解压 scrcpy");
     extract_archive(&archive, &unzip_dir)?;
 
     let scrcpy_bin = find_file_named(&unzip_dir, "scrcpy")
@@ -613,13 +713,14 @@ fn install_scrcpy(
     let source = scrcpy_bin
         .parent()
         .ok_or_else(|| "scrcpy 可执行文件路径异常".to_string())?;
-    let target = tools_dir.join("scrcpy");
-    copy_dir_recursive(source, &target)?;
-    let scrcpy = target.join("scrcpy");
+    let target_dir = tools_dir.join("scrcpy");
+    copy_dir_recursive(source, &target_dir)?;
+    let scrcpy = target_dir.join("scrcpy");
     fs::set_permissions(&scrcpy, fs::Permissions::from_mode(0o755))
         .map_err(|error| error.to_string())?;
     let scrcpy_path = scrcpy.to_string_lossy().to_string();
     run_required(&scrcpy_path, &["--version"]).map_err(|error| error.user_message)?;
+    push_install_log(target, logs, emit_progress, "scrcpy 安装并验证完成");
     Ok(scrcpy_path)
 }
 
@@ -643,9 +744,12 @@ pub(crate) fn get_tool_status_for_config(config: &AppConfig) -> Result<ToolStatu
     })
 }
 
-pub(crate) fn install_tools_into_config() -> Result<ToolInstallResult, String> {
+pub(crate) fn install_tools_into_config(
+    target: ToolInstallTarget,
+    mut emit_progress: impl FnMut(ToolInstallProgress),
+) -> Result<ToolInstallResult, String> {
     let dir = tools_dir()?;
-    let temp_dir = config_dir()?.join("install-tmp");
+    let temp_dir = config_dir()?.join(format!("install-tmp-{target:?}").to_ascii_lowercase());
     if temp_dir.exists() {
         fs::remove_dir_all(&temp_dir).map_err(|error| error.to_string())?;
     }
@@ -653,12 +757,36 @@ pub(crate) fn install_tools_into_config() -> Result<ToolInstallResult, String> {
     fs::create_dir_all(&dir).map_err(|error| error.to_string())?;
 
     let mut logs = Vec::new();
-    let adb_path = install_platform_tools(&mut logs, &temp_dir, &dir)?;
-    let scrcpy_path = install_scrcpy(&mut logs, &temp_dir, &dir)?;
+    push_install_log(target, &mut logs, &mut emit_progress, "准备工具安装目录");
+    let mut adb_path = None;
+    let mut scrcpy_path = None;
+    for kind in target.kinds() {
+        match kind {
+            ToolKind::Adb => {
+                adb_path = Some(install_platform_tools(
+                    target,
+                    &mut logs,
+                    &mut emit_progress,
+                    &temp_dir,
+                    &dir,
+                )?);
+            }
+            ToolKind::Scrcpy => {
+                scrcpy_path = Some(install_scrcpy(
+                    target,
+                    &mut logs,
+                    &mut emit_progress,
+                    &temp_dir,
+                    &dir,
+                )?);
+            }
+        }
+    }
     let _ = fs::remove_dir_all(&temp_dir);
 
-    logs.push("工具安装完成".to_string());
+    push_install_log(target, &mut logs, &mut emit_progress, "工具安装完成");
     Ok(ToolInstallResult {
+        target,
         adb_path,
         scrcpy_path,
         logs,
@@ -668,6 +796,16 @@ pub(crate) fn install_tools_into_config() -> Result<ToolInstallResult, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn install_target_expands_to_requested_tools() {
+        assert_eq!(ToolInstallTarget::Adb.kinds(), vec![ToolKind::Adb]);
+        assert_eq!(ToolInstallTarget::Scrcpy.kinds(), vec![ToolKind::Scrcpy]);
+        assert_eq!(
+            ToolInstallTarget::All.kinds(),
+            vec![ToolKind::Adb, ToolKind::Scrcpy]
+        );
+    }
 
     #[test]
     fn validate_executable_rejects_plain_files_without_execute_bits() {

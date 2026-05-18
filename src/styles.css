@@ -1129,12 +1129,17 @@ button {
 
 .install-log {
   display: grid;
-  gap: 6px;
+  gap: 2px;
   margin-top: 10px;
   border: 1px solid var(--border1);
-  border-radius: 10px;
-  padding: 12px 16px;
-  background: var(--bg3);
+  border-radius: 8px;
+  padding: 8px;
+  background: rgba(6, 10, 18, 0.82);
+}
+
+.install-log.pending {
+  border-color: rgba(61, 217, 235, 0.28);
+  background: rgba(7, 21, 27, 0.88);
 }
 
 .install-log-title {
@@ -1144,8 +1149,119 @@ button {
 }
 
 .install-log-line {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  min-height: 28px;
+  padding: 6px 8px;
+  border-radius: 6px;
   color: var(--t3);
   overflow-wrap: anywhere;
+  line-height: 1.45;
+}
+
+.install-log-line:nth-child(odd) {
+  background: rgba(255, 255, 255, 0.025);
+}
+
+.install-log-index {
+  color: var(--t4);
+  font-size: 11px;
+  text-align: right;
+  user-select: none;
+}
+
+.install-log-message {
+  color: var(--t2);
+  font-size: 12px;
+}
+
+.install-log-modal-body {
+  padding: 16px 18px 18px;
+  gap: 12px;
+}
+
+.install-log-modal-body .install-log {
+  margin-top: 0;
+  max-height: min(56vh, 520px);
+  overflow-y: auto;
+}
+
+.install-log-modal {
+  width: min(720px, calc(100vw - 32px));
+}
+
+.install-log-modal-header {
+  padding: 22px 24px 18px;
+}
+
+.install-log-heading {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.install-log-status-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 999px;
+  background: var(--green);
+  box-shadow: 0 0 0 4px rgba(74, 222, 128, 0.12);
+  flex-shrink: 0;
+}
+
+.install-log-status-dot.running {
+  background: var(--acc);
+  box-shadow: 0 0 0 4px rgba(61, 217, 235, 0.14), 0 0 18px rgba(61, 217, 235, 0.32);
+}
+
+.install-log-status-dot.failed {
+  background: var(--red);
+  box-shadow: 0 0 0 4px rgba(248, 113, 113, 0.14), 0 0 18px rgba(248, 113, 113, 0.28);
+}
+
+.install-log-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid var(--border1);
+  border-radius: 8px;
+  padding: 10px 12px;
+  background: var(--bg3);
+  color: var(--t3);
+  font-size: 12px;
+}
+
+.install-log-summary.success {
+  border-color: rgba(74, 222, 128, 0.24);
+  background: var(--green-d);
+  color: var(--green);
+}
+
+.install-log-summary.failed {
+  border-color: rgba(248, 113, 113, 0.28);
+  background: var(--red-d);
+  color: var(--red);
+}
+
+.install-log-summary.running {
+  border-color: rgba(61, 217, 235, 0.25);
+  background: var(--acc-d);
+  color: var(--acc);
+}
+
+.install-log-summary span:last-child {
+  min-width: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.install-log-modal-footer {
+  justify-content: space-between;
+  gap: 16px;
 }
 
 .source-panel {

@@ -1,6 +1,8 @@
 import type { PresetId, ScrcpyOptions } from '../../types/app';
 
 export type ToolKind = 'adb' | 'scrcpy';
+export type ToolInstallTarget = ToolKind | 'all';
+export type ToolInstallStatus = 'idle' | 'running' | 'success' | 'failed';
 
 export type ToolSource =
   | 'configured'
@@ -36,9 +38,16 @@ export type ToolStatus = {
 };
 
 export type ToolInstallResult = {
-  adb_path: string;
-  scrcpy_path: string;
+  target: ToolInstallTarget;
+  adb_path: string | null;
+  scrcpy_path: string | null;
   logs: string[];
+};
+
+export type ToolInstallProgress = {
+  target: ToolInstallTarget;
+  level: 'info' | 'success' | 'error';
+  message: string;
 };
 
 export type DeviceConnection = 'usb' | 'wireless';

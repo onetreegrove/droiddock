@@ -1,7 +1,7 @@
 import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import type { PresetId, ScrcpyOptions, WirelessSource } from '../types/app';
-import type { PairRequest, ToolKind } from '../lib/ipc/types';
+import type { PairRequest, ToolInstallTarget, ToolKind } from '../lib/ipc/types';
 import { defaultScrcpyOptions, mergeScrcpyOptions } from '../domain/scrcpyOptions';
 import { errorUserMessage } from '../lib/ipc/errors';
 import { invokeCommand } from '../lib/ipc/client';
@@ -40,6 +40,10 @@ export const useAppStore = defineStore('app', () => {
   let refreshInFlight = false;
 
   const toolStatus = computed(() => tools.toolStatus);
+  const installLogs = computed(() => tools.installLogs);
+  const installTarget = computed(() => tools.installTarget);
+  const installStatus = computed(() => tools.installStatus);
+  const installError = computed(() => tools.installError);
   const appConfig = computed(() => config.appConfig);
   const devices = computed(() => devicesStore.devices);
   const sessions = computed(() => sessionsStore.sessions);
@@ -184,10 +188,10 @@ export const useAppStore = defineStore('app', () => {
     }
   }
 
-  async function installTools() {
+  async function installTools(target: ToolInstallTarget) {
     setBusy('install', true);
     try {
-      const result = await tools.installTools();
+      const result = await tools.installTools(target);
       log(result.logs.join(' / '));
       setBusy('config', true);
       try {
@@ -379,6 +383,10 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     toolStatus,
+    installLogs,
+    installTarget,
+    installStatus,
+    installError,
     appConfig,
     devices,
     sessions,

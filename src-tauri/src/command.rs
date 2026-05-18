@@ -152,6 +152,19 @@ fn run_command_inner(
 
 pub fn run_required(path: &str, args: &[&str]) -> AppResult<CommandResult> {
     let result = run_command_inner(path, args, None, None);
+    required_result(result)
+}
+
+pub fn run_required_with_timeout(
+    path: &str,
+    args: &[&str],
+    timeout: Duration,
+) -> AppResult<CommandResult> {
+    let result = run_command_inner(path, args, None, Some(timeout));
+    required_result(result)
+}
+
+fn required_result(result: CommandResult) -> AppResult<CommandResult> {
     if result.ok {
         Ok(result)
     } else {
@@ -172,6 +185,15 @@ mod tests {
             run_command_with_timeout("/bin/sh", &["-c", "sleep 1"], Duration::from_millis(20));
         assert!(!result.ok);
         assert_eq!(result.message, "命令执行超时");
+    }
+
+    #[test]
+    fn required_command_timeout_returns_app_error() {
+        let error =
+            run_required_with_timeout("/bin/sh", &["-c", "sleep 1"], Duration::from_millis(20))
+                .unwrap_err();
+
+        assert_eq!(error.user_message, "命令执行超时");
     }
 
     #[test]
