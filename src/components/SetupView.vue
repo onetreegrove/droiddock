@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { open } from '@tauri-apps/plugin-dialog';
 import AppHeader from './AppHeader.vue';
+import ConfirmModal from './ConfirmModal.vue';
 import StatusChip from './StatusChip.vue';
 import { useAppStore } from '../stores/app';
 import { useToolsStore } from '../stores/tools';
@@ -17,10 +18,14 @@ const ui = useUiStore();
 const setupError = ref<string | null>(null);
 const choosingTool = ref<ToolKind | null>(null);
 const installLogDialogOpen = ref(false);
+const pendingInstallTarget = ref<ToolInstallTarget | null>(null);
+const installLogElement = ref<HTMLElement | null>(null);
+const installTargets: ToolInstallTarget[] = ['adb', 'scrcpy', 'all'];
 let unlistenInstallProgress: (() => void) | null = null;
 
 const toolOperationLocked = computed(() => store.busy.tools || store.busy.install || choosingTool.value !== null);
 const installLocked = computed(() => store.busy.install || store.busy.tools || choosingTool.value !== null);
+const canReopenInstallLog = computed(() => !installLogDialogOpen.value && !store.busy.install && store.installLogs.length > 0);
 const visibleInstallLog = computed(() =>
   installProgressLines(Boolean(store.busy.install), store.installLogs, store.installTarget),
 );
@@ -45,11 +50,52 @@ function statusLabel(diagnostic: ToolDiagnostic) {
   return diagnostic.health === 'ready' ? '正常' : toolActionLabel(diagnostic);
 }
 
+function chooseToolButtonLabel(diagnostic: ToolDiagnostic) {
+  if (diagnostic.health === 'ready') return diagnostic.source === 'configured' ? '更换路径' : '手动选择';
+  if (diagnostic.health === 'wrong_tool') return '重新选择正确工具';
+  if (diagnostic.health === 'not_executable') return '选择可执行文件';
+  return '手动选择';
+}
+
 function installButtonLabel(target: ToolInstallTarget) {
   if (store.busy.install && store.installTarget === target) return '安装中...';
   if (target === 'adb') return '安装 adb';
   if (target === 'scrcpy') return '安装 scrcpy';
   return '安装全部';
+}
+
+function installButtonClass(target: ToolInstallTarget) {
+  return target === 'all' ? 'btn btn-primary' : 'btn btn-ghost';
+}
+
+function installButtonTitle(target: ToolInstallTarget) {
+  if (store.busy.install) return `正在安装 ${installTargetLabel(store.installTarget)}，请等待完成`;
+  if (store.busy.tools) return '正在检测工具状态，请等待完成';
+  if (choosingTool.value) return `正在选择 ${choosingTool.value} 路径，请先完成或取消`;
+  return installButtonLabel(target);
+}
+
+function installConfirmTitle(target: ToolInstallTarget) {
+  return `安装 ${installTargetLabel(target)}？`;
+}
+
+function installConfirmMessage(target: ToolInstallTarget) {
+  return `将下载并安装 ${installTargetLabel(target)} 到 ~/Library/Application Support/DroidDock/tools/，并更新 DroidDock 当前使用的工具。安装期间请保持网络连接。`;
+}
+
+function toolActionTitle(tool: ToolKind) {
+  if (store.busy.install) return `正在安装 ${installTargetLabel(store.installTarget)}，请等待完成`;
+  if (store.busy.tools) return '正在更新工具状态，请等待完成';
+  if (choosingTool.value && choosingTool.value !== tool) return `正在选择 ${choosingTool.value} 路径，请先完成或取消`;
+  if (choosingTool.value === tool) return `正在选择 ${tool} 路径`;
+  return '';
+}
+
+function refreshButtonTitle() {
+  if (store.busy.install) return `正在安装 ${installTargetLabel(store.installTarget)}，请等待完成`;
+  if (store.busy.tools) return '正在检测工具状态';
+  if (choosingTool.value) return `正在选择 ${choosingTool.value} 路径，请先完成或取消`;
+  return '重新检测 adb 与 scrcpy 状态';
 }
 
 function installTargetLabel(target: ToolInstallTarget) {
@@ -60,7 +106,22 @@ function installTargetLabel(target: ToolInstallTarget) {
 
 function closeInstallLogDialog() {
   installLogDialogOpen.value = false;
-  toolsStore.clearInstallLogs();
+}
+
+function reopenInstallLogDialog() {
+  installLogDialogOpen.value = true;
+}
+
+function tryCloseInstallLogDialog() {
+  if (store.busy.install) return;
+  closeInstallLogDialog();
+}
+
+async function scrollInstallLogToBottom() {
+  await nextTick();
+  const element = installLogElement.value;
+  if (!element) return;
+  element.scrollTop = element.scrollHeight;
 }
 
 async function refreshTools() {
@@ -109,6 +170,22 @@ async function clearToolPath(tool: ToolKind) {
   }
 }
 
+function requestInstallTools(target: ToolInstallTarget) {
+  if (installLocked.value) return;
+  pendingInstallTarget.value = target;
+}
+
+function cancelInstallTools() {
+  pendingInstallTarget.value = null;
+}
+
+async function confirmInstallTools() {
+  const target = pendingInstallTarget.value;
+  if (!target) return;
+  pendingInstallTarget.value = null;
+  await installTools(target);
+}
+
 async function installTools(target: ToolInstallTarget) {
   if (installLocked.value) return;
   setupError.value = null;
@@ -117,13 +194,27 @@ async function installTools(target: ToolInstallTarget) {
     await store.installTools(target);
     ui.pushToast('工具安装完成', 'success');
   } catch (error) {
-    setupError.value = errorUserMessage(error);
-    ui.pushToast(setupError.value, 'error');
+    setupError.value = `安装失败：${errorUserMessage(error)}`;
+    ui.pushToast('工具安装失败，请查看安装日志', 'error');
   }
 }
 
+watch(
+  () => [showInstallLogDialog.value, visibleInstallLog.value.length],
+  () => {
+    if (showInstallLogDialog.value) {
+      void scrollInstallLogToBottom();
+    }
+  },
+  { flush: 'post' },
+);
+
 onMounted(async () => {
-  unlistenInstallProgress = await toolsStore.listenToolInstallProgress();
+  try {
+    unlistenInstallProgress = await toolsStore.listenToolInstallProgress();
+  } catch (error) {
+    setupError.value = `安装进度监听不可用：${errorUserMessage(error)}`;
+  }
 });
 
 onBeforeUnmount(() => {
@@ -155,11 +246,19 @@ onBeforeUnmount(() => {
           <div class="tool-message">{{ toolSummary(diagnostic) }}</div>
         </div>
         <div class="tool-actions">
-          <button class="btn btn-ghost compact-button" :disabled="toolOperationLocked" @click="chooseToolPath(diagnostic.kind)">手动选择</button>
+          <button
+            class="btn btn-ghost compact-button"
+            :disabled="toolOperationLocked"
+            :title="toolActionTitle(diagnostic.kind)"
+            @click="chooseToolPath(diagnostic.kind)"
+          >
+            {{ chooseToolButtonLabel(diagnostic) }}
+          </button>
           <button
             v-if="diagnostic.source === 'configured'"
             class="btn btn-ghost compact-button"
             :disabled="toolOperationLocked"
+            :title="toolActionTitle(diagnostic.kind)"
             @click="clearToolPath(diagnostic.kind)"
           >
             清除路径
@@ -167,29 +266,26 @@ onBeforeUnmount(() => {
         </div>
       </div>
       <div class="install-panel">
-        <div><div class="panel-title">自动安装</div><div class="hint-text">工具将安装到 ~/Library/Application Support/DroidDock/tools/</div></div>
+        <div class="install-panel-copy">
+          <div class="panel-title">自动安装</div>
+          <div class="hint-text">工具将安装到 ~/Library/Application Support/DroidDock/tools/</div>
+        </div>
         <div class="tool-actions">
-          <button class="btn btn-ghost" :disabled="toolOperationLocked" @click="refreshTools">重新检测</button>
-          <button class="btn btn-ghost" :disabled="installLocked" @click="installTools('adb')">
+          <button class="btn btn-ghost" :disabled="toolOperationLocked" :title="refreshButtonTitle()" @click="refreshTools">重新检测</button>
+          <button v-if="canReopenInstallLog" class="btn btn-ghost" @click="reopenInstallLogDialog">查看上次安装日志</button>
+          <button
+            v-for="target in installTargets"
+            :key="target"
+            :class="installButtonClass(target)"
+            :disabled="installLocked"
+            :title="installButtonTitle(target)"
+            @click="requestInstallTools(target)"
+          >
             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
               <path d="M6 1.5v7M3.5 6l2.5 3 2.5-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
               <path d="M2 10.5h8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
             </svg>
-            {{ installButtonLabel('adb') }}
-          </button>
-          <button class="btn btn-ghost" :disabled="installLocked" @click="installTools('scrcpy')">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-              <path d="M6 1.5v7M3.5 6l2.5 3 2.5-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
-              <path d="M2 10.5h8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-            </svg>
-            {{ installButtonLabel('scrcpy') }}
-          </button>
-          <button class="btn btn-primary" :disabled="installLocked" @click="installTools('all')">
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
-              <path d="M6 1.5v7M3.5 6l2.5 3 2.5-3" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round" />
-              <path d="M2 10.5h8" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" />
-            </svg>
-            {{ installButtonLabel('all') }}
+            {{ installButtonLabel(target) }}
           </button>
         </div>
       </div>
@@ -208,7 +304,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </div>
-    <div v-if="showInstallLogDialog" class="modal-overlay" @click.self="!store.busy.install && closeInstallLogDialog()">
+    <div v-if="showInstallLogDialog" class="modal-overlay" @click.self="tryCloseInstallLogDialog">
       <section class="modal-card log-modal install-log-modal">
         <header class="modal-header install-log-modal-header">
           <div class="install-log-heading">
@@ -229,7 +325,7 @@ onBeforeUnmount(() => {
             <span>{{ installLogSummary.title }}</span>
             <span>{{ installLogSummary.detail }}</span>
           </div>
-          <div :class="['install-log', store.busy.install ? 'pending' : '']">
+          <div ref="installLogElement" :class="['install-log', store.busy.install ? 'pending' : '']">
             <div v-for="(line, index) in visibleInstallLog" :key="`${index}-${line}`" class="install-log-line">
               <span class="install-log-index mono">{{ String(index + 1).padStart(2, '0') }}</span>
               <span class="install-log-message mono">{{ line }}</span>
@@ -242,5 +338,13 @@ onBeforeUnmount(() => {
         </footer>
       </section>
     </div>
+    <ConfirmModal
+      v-if="pendingInstallTarget"
+      :title="installConfirmTitle(pendingInstallTarget)"
+      :message="installConfirmMessage(pendingInstallTarget)"
+      confirm-text="开始安装"
+      @confirm="confirmInstallTools"
+      @cancel="cancelInstallTools"
+    />
   </section>
 </template>
