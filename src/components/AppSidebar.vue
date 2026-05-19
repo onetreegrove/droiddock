@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { computed } from 'vue';
+import appPackage from '../../package.json';
 import { useAppStore } from '../stores/app';
 import { useUiStore } from '../stores/ui';
 
 const store = useAppStore();
 const ui = useUiStore();
+const appVersion = `v${appPackage.version}`;
 const runningCount = computed(() => store.sessions.filter((session) => session.status === 'running').length);
 </script>
 
@@ -67,7 +69,7 @@ const runningCount = computed(() => store.sessions.filter((session) => session.s
     </nav>
     <div class="sidebar-spacer"></div>
     <div class="sidebar-footer">
-      <div class="tool-version"><span>DroidDock</span><span>v1.0.0</span></div>
+      <div class="tool-version"><span>DroidDock</span><span>{{ appVersion }}</span></div>
     </div>
   </aside>
 </template>
