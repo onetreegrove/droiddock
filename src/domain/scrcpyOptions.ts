@@ -1,11 +1,19 @@
-import type { PresetId, ScrcpyOptions } from '../types/app';
+import type { PresetId, ScrcpyCapabilities, ScrcpyOptions } from '../types/app';
+
+export const defaultScrcpyCapabilities: ScrcpyCapabilities = {
+  supportsKeepActive: false,
+  supportsBackgroundColor: false,
+  supportsWindowAspectRatioLock: false,
+};
 
 export const defaultScrcpyOptions: ScrcpyOptions = {
   maxSize: 1920,
   maxFps: 60,
   videoCodec: 'default',
   noAudio: true,
-  stayAwake: true,
+  keepActive: true,
+  stayAwake: false,
+  windowAspectRatioLock: true,
 };
 
 export const presetOptions: Record<PresetId, ScrcpyOptions> = {
@@ -40,7 +48,32 @@ export function mergeScrcpyOptions(
   });
 }
 
-export function buildScrcpyArgs(serial: string, options: ScrcpyOptions): string[] {
+export function normalizeBackgroundColor(value: string): string | null {
+  const color = value.trim();
+  const match = color.match(/^#?([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/);
+  if (!match) return null;
+
+  const hex = match[1].toLowerCase();
+  if (hex.length === 3) {
+    return `#${hex[0]}${hex[0]}${hex[1]}${hex[1]}${hex[2]}${hex[2]}`;
+  }
+  return `#${hex}`;
+}
+
+export function backgroundColorErrorMessage(value: string): string | null {
+  if (!value.trim()) return null;
+  return normalizeBackgroundColor(value) ? null : '背景色格式不正确，请使用 #RGB 或 #RRGGBB。';
+}
+
+export function nextWindowAspectRatioLockValue(value: boolean | undefined): boolean {
+  return !(value ?? true);
+}
+
+export function buildScrcpyArgs(
+  serial: string,
+  options: ScrcpyOptions,
+  capabilities: ScrcpyCapabilities = defaultScrcpyCapabilities,
+): string[] {
   const args = ['-s', serial];
 
   if (options.maxSize !== undefined) args.push(`--max-size=${options.maxSize}`);
@@ -54,12 +87,24 @@ export function buildScrcpyArgs(serial: string, options: ScrcpyOptions): string[
   if (options.showTouches) args.push('--show-touches');
   if (options.alwaysOnTop) args.push('--always-on-top');
   if (options.fullscreen) args.push('--fullscreen');
+  if (options.keepActive && capabilities.supportsKeepActive) args.push('--keep-active');
+  if (options.backgroundColor?.trim() && capabilities.supportsBackgroundColor) {
+    const color = normalizeBackgroundColor(options.backgroundColor);
+    if (color) args.push(`--background-color=${color}`);
+  }
+  if (options.windowAspectRatioLock === false && capabilities.supportsWindowAspectRatioLock) {
+    args.push('--no-window-aspect-ratio-lock');
+  }
 
   return args;
 }
 
-export function buildScrcpyCommand(serial: string, options: ScrcpyOptions): string {
-  return ['scrcpy', ...buildScrcpyArgs(serial, options)].join(' ');
+export function buildScrcpyCommand(
+  serial: string,
+  options: ScrcpyOptions,
+  capabilities: ScrcpyCapabilities = defaultScrcpyCapabilities,
+): string {
+  return ['scrcpy', ...buildScrcpyArgs(serial, options, capabilities)].join(' ');
 }
 
 export function optionSummaryTags(options: ScrcpyOptions): string[] {
@@ -76,6 +121,12 @@ export function optionSummaryTags(options: ScrcpyOptions): string[] {
   if (options.showTouches) tags.push('touches');
   if (options.alwaysOnTop) tags.push('top');
   if (options.fullscreen) tags.push('fullscreen');
+  if (options.keepActive) tags.push('保持活跃');
+  if (options.backgroundColor) {
+    const color = normalizeBackgroundColor(options.backgroundColor);
+    if (color) tags.push(`背景 ${color}`);
+  }
+  if (options.windowAspectRatioLock === false) tags.push('自由缩放窗口');
 
   return tags;
 }
@@ -95,6 +146,9 @@ export function optionSummaryTagsFromArgs(args: string[]): string[] {
     if (arg === '--show-touches') options.showTouches = true;
     if (arg === '--always-on-top') options.alwaysOnTop = true;
     if (arg === '--fullscreen') options.fullscreen = true;
+    if (arg === '--keep-active') options.keepActive = true;
+    if (arg.startsWith('--background-color=')) options.backgroundColor = arg.slice('--background-color='.length);
+    if (arg === '--no-window-aspect-ratio-lock') options.windowAspectRatioLock = false;
   }
 
   return optionSummaryTags(options);

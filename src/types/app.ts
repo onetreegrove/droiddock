@@ -14,6 +14,15 @@ export type ScrcpyOptions = {
   showTouches?: boolean;
   alwaysOnTop?: boolean;
   fullscreen?: boolean;
+  keepActive?: boolean;
+  backgroundColor?: string;
+  windowAspectRatioLock?: boolean;
+};
+
+export type ScrcpyCapabilities = {
+  supportsKeepActive: boolean;
+  supportsBackgroundColor: boolean;
+  supportsWindowAspectRatioLock: boolean;
 };
 
 export type PresetId = 'daily' | 'lowBandwidth' | 'demo' | 'batterySaver' | 'viewOnly';

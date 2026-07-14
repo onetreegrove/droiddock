@@ -688,14 +688,37 @@ button {
   min-width: 0;
 }
 
+.field-stack {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
 .field-select:focus,
 .field-input:focus {
   border-color: var(--acc);
 }
 
+.field-select:disabled,
+.field-input:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
 .field-input {
   width: 100%;
   min-height: 36px;
+}
+
+.field-input.invalid {
+  border-color: rgba(248, 113, 113, 0.65);
+}
+
+.field-error {
+  color: var(--red);
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .toggle-groups {
@@ -752,6 +775,11 @@ button {
 .toggle-card.on {
   border-color: rgba(61, 217, 235, 0.35);
   background: var(--acc-d);
+}
+
+.toggle-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .toggle-title {

@@ -1,13 +1,23 @@
 <script setup lang="ts">
-import type { ScrcpyOptions } from '../types/app';
+import { computed } from 'vue';
+import { backgroundColorErrorMessage, defaultScrcpyCapabilities, nextWindowAspectRatioLockValue } from '../domain/scrcpyOptions';
+import type { ScrcpyCapabilities, ScrcpyOptions } from '../types/app';
 
-const props = withDefaults(defineProps<{ options: ScrcpyOptions; variant?: 'device' | 'settings' }>(), {
+const props = withDefaults(defineProps<{ options: ScrcpyOptions; variant?: 'device' | 'settings'; capabilities?: ScrcpyCapabilities }>(), {
   variant: 'device',
+  capabilities: () => defaultScrcpyCapabilities,
 });
 const emit = defineEmits<{ 'update:options': [value: ScrcpyOptions] }>();
 
+const backgroundColor = computed(() => props.options.backgroundColor ?? '');
+const backgroundColorError = computed(() => backgroundColorErrorMessage(backgroundColor.value));
+
 function patch(value: Partial<ScrcpyOptions>) {
   emit('update:options', { ...props.options, ...value });
+}
+
+function patchBackgroundColor(value: string) {
+  patch({ backgroundColor: value.trim() ? value : undefined });
 }
 </script>
 
@@ -50,6 +60,19 @@ function patch(value: Partial<ScrcpyOptions>) {
         <option value="2M">2 Mbps</option>
       </select>
     </div>
+    <div class="param-row">
+      <span class="param-label">背景色</span>
+      <div class="field-stack">
+        <input
+          :class="['field-input', { invalid: backgroundColorError }]"
+          :value="backgroundColor"
+          :disabled="!capabilities.supportsBackgroundColor"
+          placeholder="#234567"
+          @input="patchBackgroundColor(($event.target as HTMLInputElement).value)"
+        />
+        <div v-if="backgroundColorError && capabilities.supportsBackgroundColor" class="field-error">{{ backgroundColorError }}</div>
+      </div>
+    </div>
     <div class="toggle-groups">
       <div class="toggle-group">
         <div class="toggle-group-title">窗口</div>
@@ -62,6 +85,14 @@ function patch(value: Partial<ScrcpyOptions>) {
             <div><div class="toggle-title">全屏</div><span>--fullscreen</span></div>
             <span :class="['toggle-switch', { on: options.fullscreen }]"><span></span></span>
           </button>
+          <button
+            :class="['toggle-card', { on: options.windowAspectRatioLock !== false }]"
+            :disabled="!capabilities.supportsWindowAspectRatioLock"
+            @click="patch({ windowAspectRatioLock: nextWindowAspectRatioLockValue(options.windowAspectRatioLock) })"
+          >
+            <div><div class="toggle-title">锁定窗口比例</div><span>{{ capabilities.supportsWindowAspectRatioLock ? '避免黑边' : '需要 scrcpy 4.0+' }}</span></div>
+            <span :class="['toggle-switch', { on: options.windowAspectRatioLock !== false }]"><span></span></span>
+          </button>
         </div>
       </div>
       <div class="toggle-group">
@@ -72,8 +103,16 @@ function patch(value: Partial<ScrcpyOptions>) {
             <span :class="['toggle-switch', { on: options.noControl }]"><span></span></span>
           </button>
           <button :class="['toggle-card', { on: options.stayAwake }]" @click="patch({ stayAwake: !options.stayAwake })">
-            <div><div class="toggle-title">保持亮屏</div><span>--stay-awake</span></div>
+            <div><div class="toggle-title">插电时保持唤醒</div><span>--stay-awake</span></div>
             <span :class="['toggle-switch', { on: options.stayAwake }]"><span></span></span>
+          </button>
+          <button
+            :class="['toggle-card', { on: options.keepActive }]"
+            :disabled="!capabilities.supportsKeepActive"
+            @click="patch({ keepActive: !options.keepActive })"
+          >
+            <div><div class="toggle-title">保持设备活跃</div><span>{{ capabilities.supportsKeepActive ? '不修改系统设置' : '需要 scrcpy 4.0+' }}</span></div>
+            <span :class="['toggle-switch', { on: options.keepActive }]"><span></span></span>
           </button>
           <button :class="['toggle-card', { on: options.showTouches }]" @click="patch({ showTouches: !options.showTouches })">
             <div><div class="toggle-title">显示触摸</div><span>--show-touches</span></div>

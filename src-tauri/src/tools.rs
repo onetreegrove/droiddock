@@ -12,11 +12,12 @@ use crate::{
     command::run_required,
     command::run_required_with_timeout,
     config::{config_dir, tools_dir, AppConfig},
-    tool_manifest::DEFAULT_TOOL_MANIFEST,
+    scrcpy::ScrcpyCapabilities,
+    tool_manifest::{ToolDownload, DEFAULT_TOOL_MANIFEST},
 };
 
 const TOOL_DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(180);
-const SCRCPY_RELEASE_QUERY_TIMEOUT: Duration = Duration::from_secs(30);
+const SCRCPY_FIXED_VERSION: &str = "4.0";
 
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -54,6 +55,7 @@ pub(crate) struct ToolDiagnostic {
     pub(crate) source: Option<ToolSource>,
     pub(crate) version: Option<String>,
     pub(crate) arch: Option<String>,
+    pub(crate) scrcpy_capabilities: ScrcpyCapabilities,
     pub(crate) health: ToolHealth,
     pub(crate) message: String,
 }
@@ -245,6 +247,51 @@ fn parsed_version(kind: ToolKind, stdout: String) -> Option<String> {
     }
 }
 
+pub(crate) fn scrcpy_capabilities_from_version(version: Option<String>) -> ScrcpyCapabilities {
+    let Some(version) = version else {
+        return ScrcpyCapabilities::default();
+    };
+    let lower = version.to_ascii_lowercase();
+    if !lower.contains("scrcpy") {
+        return ScrcpyCapabilities::default();
+    }
+
+    let Some(version_token) = lower
+        .split_whitespace()
+        .find(|part| part.trim_start_matches('v').chars().next().is_some_and(|character| character.is_ascii_digit()))
+    else {
+        return ScrcpyCapabilities::default();
+    };
+    let normalized = version_token.trim_start_matches('v');
+    let mut parts = normalized.split('.');
+    let major = parts.next().and_then(|value| value.parse::<u32>().ok());
+
+    if major.is_some_and(|major| major >= 4) {
+        ScrcpyCapabilities::scrcpy_4()
+    } else {
+        ScrcpyCapabilities::default()
+    }
+}
+
+#[cfg(test)]
+mod version_tests {
+    use super::*;
+
+    #[test]
+    fn parses_scrcpy_4_capabilities() {
+        assert!(scrcpy_capabilities_from_version(Some("scrcpy 4.0".to_string())).supports_keep_active);
+        assert!(scrcpy_capabilities_from_version(Some("scrcpy 4.0.1".to_string())).supports_background_color);
+        assert!(scrcpy_capabilities_from_version(Some("scrcpy v4.0".to_string())).supports_window_aspect_ratio_lock);
+    }
+
+    #[test]
+    fn rejects_old_or_unknown_scrcpy_capabilities() {
+        assert!(!scrcpy_capabilities_from_version(Some("scrcpy 3.3.4".to_string())).supports_keep_active);
+        assert!(!scrcpy_capabilities_from_version(Some("not scrcpy".to_string())).supports_keep_active);
+        assert!(!scrcpy_capabilities_from_version(None).supports_keep_active);
+    }
+}
+
 fn command_identifies_tool(kind: ToolKind, stdout: &str) -> bool {
     let stdout = stdout.to_ascii_lowercase();
     match kind {
@@ -261,12 +308,18 @@ fn diagnostic(
     health: ToolHealth,
     message: impl Into<String>,
 ) -> ToolDiagnostic {
+    let scrcpy_capabilities = if kind == ToolKind::Scrcpy {
+        scrcpy_capabilities_from_version(version.clone())
+    } else {
+        ScrcpyCapabilities::default()
+    };
     ToolDiagnostic {
         kind,
         path: candidate.map(|candidate| candidate.path.clone()),
         source: candidate.map(|candidate| candidate.source.clone()),
         version,
         arch,
+        scrcpy_capabilities,
         health,
         message: message.into(),
     }
@@ -279,6 +332,7 @@ fn host_support_diagnostic_for_arch(kind: ToolKind, arch: &str) -> Option<ToolDi
         source: None,
         version: None,
         arch: Some(arch.to_string()),
+        scrcpy_capabilities: ScrcpyCapabilities::default(),
         health: ToolHealth::IncompatibleArch,
         message: "当前版本仅支持 Apple Silicon Mac，暂不支持 Intel Mac".to_string(),
     })
@@ -296,6 +350,7 @@ fn missing_diagnostic(kind: ToolKind) -> ToolDiagnostic {
         source: None,
         version: None,
         arch: None,
+        scrcpy_capabilities: ScrcpyCapabilities::default(),
         health: ToolHealth::Missing,
         message: format!("未找到 {name}，请自动安装或手动选择路径"),
     }
@@ -523,6 +578,65 @@ fn verify_sha256(path: &Path, expected: &str) -> Result<String, String> {
     }
 }
 
+fn parse_sha256_sums(content: &str, file_name: &str) -> Option<String> {
+    content.lines().find_map(|line| {
+        let mut parts = line.split_whitespace();
+        let sha256 = parts.next()?;
+        let name = parts.next()?.trim_start_matches('*');
+        (name == file_name && sha256.len() == 64 && sha256.chars().all(|c| c.is_ascii_hexdigit()))
+            .then(|| sha256.to_string())
+    })
+}
+
+fn verify_tool_download(
+    download: &ToolDownload,
+    archive: &Path,
+    temp_dir: &Path,
+) -> Result<String, String> {
+    if !download.sha256.trim().is_empty() {
+        return verify_sha256(archive, download.sha256);
+    }
+
+    if let (Some(sums_url), Some(file_name)) = (download.sha256_sums_url, download.sha256_sums_file)
+    {
+        let sums_path = temp_dir.join("SHA256SUMS.txt");
+        download_file(sums_url, &sums_path)?;
+        let sums = fs::read_to_string(&sums_path).map_err(|error| error.to_string())?;
+        let expected = parse_sha256_sums(&sums, file_name)
+            .ok_or_else(|| "未能在 SHA256SUMS 中找到目标工具校验值".to_string())?;
+        return verify_sha256(archive, &expected);
+    }
+
+    if download.dynamic_latest {
+        return file_sha256(archive);
+    }
+
+    verify_sha256(archive, download.sha256)
+}
+
+fn version_at_least(version: &str, minimum: &str) -> bool {
+    fn parse(value: &str) -> Vec<u32> {
+        value
+            .split(|character: char| !character.is_ascii_digit() && character != '.')
+            .find(|part| part.chars().next().is_some_and(|character| character.is_ascii_digit()))
+            .unwrap_or_default()
+            .split('.')
+            .filter_map(|part| part.parse::<u32>().ok())
+            .collect()
+    }
+
+    let current = parse(version);
+    let required = parse(minimum);
+    for index in 0..required.len().max(current.len()) {
+        let current_part = current.get(index).copied().unwrap_or(0);
+        let required_part = required.get(index).copied().unwrap_or(0);
+        if current_part != required_part {
+            return current_part > required_part;
+        }
+    }
+    true
+}
+
 fn copy_dir_recursive(source: &Path, target: &Path) -> Result<(), String> {
     if target.exists() {
         fs::remove_dir_all(target).map_err(|error| error.to_string())?;
@@ -566,30 +680,6 @@ fn find_file_named(root: &Path, file_name: &str) -> Option<PathBuf> {
     None
 }
 
-fn find_scrcpy_macos_aarch64_asset(payload: &str) -> Result<String, String> {
-    let value: serde_json::Value =
-        serde_json::from_str(payload).map_err(|error| error.to_string())?;
-    let assets = value
-        .get("assets")
-        .and_then(|assets| assets.as_array())
-        .ok_or_else(|| "scrcpy release response did not include assets".to_string())?;
-
-    assets
-        .iter()
-        .find_map(|asset| {
-            let name = asset.get("name")?.as_str()?.to_ascii_lowercase();
-            let url = asset.get("browser_download_url")?.as_str()?;
-            (name.contains("macos")
-                && name.contains("aarch64")
-                && DEFAULT_TOOL_MANIFEST
-                    .allowed_scrcpy_asset_suffixes
-                    .iter()
-                    .any(|suffix| name.ends_with(suffix)))
-            .then_some(url.to_string())
-        })
-        .ok_or_else(|| "未找到 scrcpy macOS Apple Silicon 下载包".to_string())
-}
-
 fn push_install_log(
     target: ToolInstallTarget,
     logs: &mut Vec<String>,
@@ -620,22 +710,17 @@ fn install_platform_tools(
         emit_progress,
         "下载 Android SDK Platform Tools",
     );
-    download_file(DEFAULT_TOOL_MANIFEST.platform_tools.url, &archive)?;
-    if cfg!(debug_assertions)
-        && DEFAULT_TOOL_MANIFEST
-            .platform_tools
-            .sha256
-            .trim()
-            .is_empty()
-    {
+    let download = &DEFAULT_TOOL_MANIFEST.platform_tools;
+    download_file(download.url, &archive)?;
+    if download.dynamic_latest {
         push_install_log(
             target,
             logs,
             emit_progress,
-            "开发模式：platform-tools 缺少 sha256，已跳过强校验",
+            "platform-tools 使用 Google latest 动态来源，安装结果会随上游更新变化",
         );
     }
-    let sha256 = verify_sha256(&archive, DEFAULT_TOOL_MANIFEST.platform_tools.sha256)?;
+    let sha256 = verify_tool_download(download, &archive, temp_dir)?;
     push_install_log(
         target,
         logs,
@@ -652,7 +737,12 @@ fn install_platform_tools(
     fs::set_permissions(&adb, fs::Permissions::from_mode(0o755))
         .map_err(|error| error.to_string())?;
     let adb_path = adb.to_string_lossy().to_string();
-    run_required(&adb_path, &["version"]).map_err(|error| error.user_message)?;
+    let version = run_required(&adb_path, &["version"]).map_err(|error| error.user_message)?;
+    if let Some(minimum) = download.min_version {
+        if !version_at_least(&version.stdout, minimum) {
+            return Err(format!("adb 版本低于 {minimum}，请稍后重新安装或手动选择新版 adb"));
+        }
+    }
     push_install_log(target, logs, emit_progress, "adb 安装并验证完成");
     Ok(adb_path)
 }
@@ -664,28 +754,9 @@ fn install_scrcpy(
     temp_dir: &Path,
     tools_dir: &Path,
 ) -> Result<String, String> {
-    push_install_log(
-        target,
-        logs,
-        emit_progress,
-        "查询 scrcpy 最新 macOS Apple Silicon 版本",
-    );
-    let api_result = run_required_with_timeout(
-        "/usr/bin/curl",
-        &[
-            "-fsSL",
-            "--connect-timeout",
-            "15",
-            "--max-time",
-            "30",
-            "-H",
-            "Accept: application/vnd.github+json",
-            DEFAULT_TOOL_MANIFEST.scrcpy_release_api,
-        ],
-        SCRCPY_RELEASE_QUERY_TIMEOUT,
-    )
-    .map_err(|error| error.user_message)?;
-    let url = find_scrcpy_macos_aarch64_asset(&api_result.stdout)?;
+    push_install_log(target, logs, emit_progress, "准备下载 scrcpy 4.0 macOS Apple Silicon 包");
+    let download = &DEFAULT_TOOL_MANIFEST.scrcpy;
+    let url = download.url;
     let archive_name = url.rsplit('/').next().unwrap_or("scrcpy-download");
     let archive = temp_dir.join(archive_name);
     let unzip_dir = temp_dir.join("scrcpy-unzip");
@@ -696,15 +767,8 @@ fn install_scrcpy(
         "下载 scrcpy macOS Apple Silicon 包",
     );
     download_file(&url, &archive)?;
-    let sha256 = file_sha256(&archive)?;
+    let sha256 = verify_tool_download(download, &archive, temp_dir)?;
     push_install_log(target, logs, emit_progress, format!("scrcpy sha256 {sha256}"));
-    push_install_log(
-        target,
-        logs,
-        emit_progress,
-        "scrcpy 当前使用 GitHub latest 下载源；固定版本 sha256 校验将在 manifest 固定下载 URL 后启用"
-            .to_string(),
-    );
     push_install_log(target, logs, emit_progress, "解压 scrcpy");
     extract_archive(&archive, &unzip_dir)?;
 
@@ -719,7 +783,12 @@ fn install_scrcpy(
     fs::set_permissions(&scrcpy, fs::Permissions::from_mode(0o755))
         .map_err(|error| error.to_string())?;
     let scrcpy_path = scrcpy.to_string_lossy().to_string();
-    run_required(&scrcpy_path, &["--version"]).map_err(|error| error.user_message)?;
+    let version = run_required(&scrcpy_path, &["--version"]).map_err(|error| error.user_message)?;
+    if !version_at_least(&version.stdout, SCRCPY_FIXED_VERSION) {
+        return Err(format!(
+            "scrcpy 版本低于 {SCRCPY_FIXED_VERSION}，请稍后重新安装或手动选择新版 scrcpy"
+        ));
+    }
     push_install_log(target, logs, emit_progress, "scrcpy 安装并验证完成");
     Ok(scrcpy_path)
 }
@@ -849,31 +918,15 @@ mod tests {
     }
 
     #[test]
-    fn scrcpy_release_parser_prefers_macos_aarch64_zip_asset() {
-        let payload = r#"{
-          "assets": [
-            { "name": "scrcpy-win64.zip", "browser_download_url": "https://example.test/win.zip" },
-            { "name": "scrcpy-macos-aarch64-v3.3.3.zip", "browser_download_url": "https://example.test/scrcpy-macos-aarch64-v3.3.3.zip" }
-          ]
-        }"#;
-
-        assert_eq!(
-            find_scrcpy_macos_aarch64_asset(payload).unwrap(),
-            "https://example.test/scrcpy-macos-aarch64-v3.3.3.zip"
-        );
-    }
-
-    #[test]
-    fn scrcpy_release_parser_accepts_current_macos_aarch64_tarball_asset() {
-        let payload = r#"{
-          "assets": [
-            { "name": "scrcpy-macos-aarch64-v3.3.4.tar.gz", "browser_download_url": "https://example.test/scrcpy-macos-aarch64-v3.3.4.tar.gz" }
-          ]
-        }"#;
-
-        assert_eq!(
-            find_scrcpy_macos_aarch64_asset(payload).unwrap(),
-            "https://example.test/scrcpy-macos-aarch64-v3.3.4.tar.gz"
+    fn fixed_scrcpy_download_pins_manifest_sha256() {
+        assert!(!DEFAULT_TOOL_MANIFEST.scrcpy.dynamic_latest);
+        assert_eq!(DEFAULT_TOOL_MANIFEST.scrcpy.sha256.len(), 64);
+        assert!(
+            DEFAULT_TOOL_MANIFEST
+                .scrcpy
+                .sha256
+                .chars()
+                .all(|character| character.is_ascii_hexdigit())
         );
     }
 

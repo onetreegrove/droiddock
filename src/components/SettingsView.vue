@@ -29,7 +29,7 @@ function applyPreset(id: PresetId) {
       </div>
       <div class="settings-panel">
         <div class="section-label">画面参数</div>
-        <ParameterEditor v-model:options="store.globalDraftOptions" variant="settings" />
+        <ParameterEditor v-model:options="store.globalDraftOptions" variant="settings" :capabilities="store.scrcpyCapabilities" />
       </div>
       <div class="section-label">常见错误说明</div>
       <div class="error-table">

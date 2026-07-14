@@ -3,7 +3,7 @@ use std::{collections::HashMap, fs, path::PathBuf};
 
 use crate::{now_secs, scrcpy::ScrcpyOptions};
 
-pub(crate) const CURRENT_CONFIG_SCHEMA_VERSION: u32 = 1;
+pub(crate) const CURRENT_CONFIG_SCHEMA_VERSION: u32 = 2;
 pub(crate) type DeviceRecords = HashMap<String, DeviceRecord>;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,13 +97,20 @@ pub(crate) fn load_config() -> AppConfig {
     };
 
     match serde_json::from_str(&content) {
-        Ok(config) => config,
+        Ok(config) => migrate_config(config),
         Err(_) => {
             let backup = path.with_extension(format!("json.bak-{}", now_secs()));
             let _ = fs::copy(&path, backup);
             AppConfig::default()
         }
     }
+}
+
+pub(crate) fn migrate_config(mut config: AppConfig) -> AppConfig {
+    if config.schema_version < CURRENT_CONFIG_SCHEMA_VERSION {
+        config.schema_version = CURRENT_CONFIG_SCHEMA_VERSION;
+    }
+    config
 }
 
 pub(crate) fn save_config_atomic(config: &AppConfig) -> Result<(), String> {
@@ -138,5 +145,41 @@ mod tests {
         assert_eq!(restored.default_preset_id, "daily");
         assert!(restored.device_aliases.is_empty());
         assert!(restored.device_records.is_empty());
+    }
+
+    #[test]
+    fn fresh_config_uses_scrcpy_4_defaults() {
+        let config = AppConfig::default();
+        assert_eq!(config.schema_version, 2);
+        assert_eq!(config.default_scrcpy_options.keep_active, Some(true));
+        assert_eq!(config.default_scrcpy_options.stay_awake, Some(false));
+        assert_eq!(
+            config.default_scrcpy_options.window_aspect_ratio_lock,
+            Some(true)
+        );
+    }
+
+    #[test]
+    fn migrated_legacy_config_preserves_existing_scrcpy_defaults() {
+        let restored: AppConfig = serde_json::from_str(
+            r#"{
+                "schema_version": 1,
+                "default_scrcpy_options": {
+                    "maxSize": 1920,
+                    "maxFps": 60,
+                    "videoCodec": "default",
+                    "noAudio": true,
+                    "stayAwake": true
+                },
+                "default_preset_id": "daily"
+            }"#,
+        )
+        .unwrap();
+
+        let migrated = migrate_config(restored);
+        assert_eq!(migrated.schema_version, 2);
+        assert_eq!(migrated.default_scrcpy_options.stay_awake, Some(true));
+        assert_eq!(migrated.default_scrcpy_options.keep_active, None);
+        assert_eq!(migrated.default_scrcpy_options.window_aspect_ratio_lock, None);
     }
 }

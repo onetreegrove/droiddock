@@ -1,4 +1,4 @@
-import type { PresetId, ScrcpyOptions } from '../../types/app';
+import type { PresetId, ScrcpyCapabilities, ScrcpyOptions } from '../../types/app';
 
 export type ToolKind = 'adb' | 'scrcpy';
 export type ToolInstallTarget = ToolKind | 'all';
@@ -26,6 +26,7 @@ export type ToolDiagnostic = {
   source: ToolSource | null;
   version: string | null;
   arch: string | null;
+  scrcpy_capabilities: ScrcpyCapabilities;
   health: ToolHealth;
   message: string;
 };

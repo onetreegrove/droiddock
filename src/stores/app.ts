@@ -2,7 +2,7 @@ import { computed, ref } from 'vue';
 import { defineStore } from 'pinia';
 import type { PresetId, ScrcpyOptions, WirelessSource } from '../types/app';
 import type { PairRequest, ToolInstallTarget, ToolKind } from '../lib/ipc/types';
-import { defaultScrcpyOptions, mergeScrcpyOptions } from '../domain/scrcpyOptions';
+import { defaultScrcpyCapabilities, defaultScrcpyOptions, mergeScrcpyOptions } from '../domain/scrcpyOptions';
 import { errorUserMessage } from '../lib/ipc/errors';
 import { invokeCommand } from '../lib/ipc/client';
 import { useConfigStore } from './config';
@@ -40,6 +40,7 @@ export const useAppStore = defineStore('app', () => {
   let refreshInFlight = false;
 
   const toolStatus = computed(() => tools.toolStatus);
+  const scrcpyCapabilities = computed(() => tools.toolStatus?.scrcpy.scrcpy_capabilities ?? defaultScrcpyCapabilities);
   const installLogs = computed(() => tools.installLogs);
   const installTarget = computed(() => tools.installTarget);
   const installStatus = computed(() => tools.installStatus);
@@ -383,6 +384,7 @@ export const useAppStore = defineStore('app', () => {
 
   return {
     toolStatus,
+    scrcpyCapabilities,
     installLogs,
     installTarget,
     installStatus,

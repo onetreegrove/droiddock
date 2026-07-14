@@ -9,7 +9,7 @@ use std::{
 
 use crate::{
     now_secs,
-    scrcpy::{build_scrcpy_args, ScrcpyOptions},
+    scrcpy::{build_scrcpy_args_with_capabilities, ScrcpyCapabilities, ScrcpyOptions},
 };
 use tauri::{AppHandle, Emitter};
 
@@ -143,6 +143,7 @@ impl SessionManager {
         serial: String,
         alias: Option<String>,
         options: ScrcpyOptions,
+        capabilities: ScrcpyCapabilities,
     ) -> Result<SessionInfo, String> {
         let connection = if serial.contains(':') {
             "wireless"
@@ -150,7 +151,7 @@ impl SessionManager {
             "usb"
         }
         .to_string();
-        let args = build_scrcpy_args(&serial, &options);
+        let args = build_scrcpy_args_with_capabilities(&serial, &options, capabilities)?;
         let mut sessions = self
             .sessions
             .lock()

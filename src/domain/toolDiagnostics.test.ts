@@ -9,6 +9,11 @@ function diagnostic(overrides: Partial<ToolDiagnostic>): ToolDiagnostic {
     source: null,
     version: null,
     arch: null,
+    scrcpy_capabilities: {
+      supportsKeepActive: false,
+      supportsBackgroundColor: false,
+      supportsWindowAspectRatioLock: false,
+    },
     health: 'missing',
     message: '未找到 adb',
     ...overrides,

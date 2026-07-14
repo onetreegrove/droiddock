@@ -2,10 +2,14 @@ import { describe, expect, it } from 'vitest';
 import {
   buildScrcpyArgs,
   buildScrcpyCommand,
+  defaultScrcpyCapabilities,
+  backgroundColorErrorMessage,
   optionSummaryTagsFromArgs,
   clearUndefinedOptions,
   defaultScrcpyOptions,
   mergeScrcpyOptions,
+  normalizeBackgroundColor,
+  nextWindowAspectRatioLockValue,
   optionSummaryTags,
   presetOptions,
 } from './scrcpyOptions';
@@ -62,6 +66,62 @@ describe('scrcpy option domain', () => {
     expect(buildScrcpyArgs(consistencyFixture.serial, consistencyFixture.options)).toEqual(consistencyFixture.args);
   });
 
+  it('normalizes supported scrcpy 4 color formats', () => {
+    expect(normalizeBackgroundColor('#abc')).toBe('#aabbcc');
+    expect(normalizeBackgroundColor('567')).toBe('#556677');
+    expect(normalizeBackgroundColor('#AABBCC')).toBe('#aabbcc');
+    expect(normalizeBackgroundColor('234567')).toBe('#234567');
+  });
+
+  it('rejects unsupported background color formats', () => {
+    expect(normalizeBackgroundColor('red')).toBeNull();
+    expect(normalizeBackgroundColor('#12')).toBeNull();
+    expect(normalizeBackgroundColor('#abcd')).toBeNull();
+    expect(normalizeBackgroundColor('#12345g')).toBeNull();
+  });
+
+  it('describes invalid background color input before launch', () => {
+    expect(backgroundColorErrorMessage('red')).toBe('背景色格式不正确，请使用 #RGB 或 #RRGGBB。');
+    expect(backgroundColorErrorMessage('#234567')).toBeNull();
+    expect(backgroundColorErrorMessage('')).toBeNull();
+  });
+
+  it('toggles window aspect ratio lock from the displayed value', () => {
+    expect(nextWindowAspectRatioLockValue(undefined)).toBe(false);
+    expect(nextWindowAspectRatioLockValue(true)).toBe(false);
+    expect(nextWindowAspectRatioLockValue(false)).toBe(true);
+  });
+
+  it('builds scrcpy 4 args only when capabilities allow them', () => {
+    expect(
+      buildScrcpyArgs(
+        'SERIAL',
+        {
+          keepActive: true,
+          backgroundColor: '567',
+          windowAspectRatioLock: false,
+        },
+        {
+          supportsKeepActive: true,
+          supportsBackgroundColor: true,
+          supportsWindowAspectRatioLock: true,
+        },
+      ),
+    ).toEqual(['-s', 'SERIAL', '--keep-active', '--background-color=#556677', '--no-window-aspect-ratio-lock']);
+
+    expect(
+      buildScrcpyArgs(
+        'SERIAL',
+        {
+          keepActive: true,
+          backgroundColor: '567',
+          windowAspectRatioLock: false,
+        },
+        defaultScrcpyCapabilities,
+      ),
+    ).toEqual(['-s', 'SERIAL']);
+  });
+
   it('skips empty bit rate and default codec in command preview', () => {
     expect(buildScrcpyCommand('SERIAL', { maxSize: 1024, videoBitRate: '', videoCodec: 'default' })).toBe(
       'scrcpy -s SERIAL --max-size=1024',
@@ -83,6 +143,14 @@ describe('scrcpy option domain', () => {
     ]);
   });
 
+  it('summarizes scrcpy 4 options', () => {
+    expect(optionSummaryTags({ keepActive: true, backgroundColor: '#234567', windowAspectRatioLock: false })).toEqual([
+      '保持活跃',
+      '背景 #234567',
+      '自由缩放窗口',
+    ]);
+  });
+
   it('summarizes the actual session args instead of recomputing current defaults', () => {
     expect(
       optionSummaryTagsFromArgs([
@@ -94,5 +162,17 @@ describe('scrcpy option domain', () => {
         '--no-control',
       ]),
     ).toEqual(['1024p', '30fps', '2M', 'no-control']);
+  });
+
+  it('summarizes scrcpy 4 args from running sessions', () => {
+    expect(
+      optionSummaryTagsFromArgs([
+        '-s',
+        'R9YT301WXXX',
+        '--keep-active',
+        '--background-color=#234567',
+        '--no-window-aspect-ratio-lock',
+      ]),
+    ).toEqual(['保持活跃', '背景 #234567', '自由缩放窗口']);
   });
 });

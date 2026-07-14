@@ -10,7 +10,7 @@ mod wireless;
 
 use command::CommandResult;
 use config::{load_config, save_config_atomic, AppConfig, DeviceOptionEntry, WirelessSource};
-use scrcpy::{build_scrcpy_args, ScrcpyOptions};
+use scrcpy::{build_scrcpy_args_with_capabilities, ScrcpyOptions};
 use sessions::{SessionInfo, SessionLogLine, SessionManager};
 use std::{
     sync::{Arc, Mutex},
@@ -378,8 +378,21 @@ fn adb_pair(state: State<'_, AppState>, request: PairRequest) -> Result<CommandR
 }
 
 #[tauri::command]
-fn preview_scrcpy_args(serial: String, options: ScrcpyOptions) -> Vec<String> {
-    build_scrcpy_args(&serial, &options)
+fn preview_scrcpy_args(
+    state: State<'_, AppState>,
+    serial: String,
+    options: ScrcpyOptions,
+) -> Result<Vec<String>, String> {
+    let config = state
+        .config
+        .lock()
+        .map_err(|_| "config lock poisoned".to_string())?
+        .clone();
+    let status = get_tool_status_for_config(&config)?;
+    if status.scrcpy.health != ToolHealth::Ready {
+        return Err(status.scrcpy.message);
+    }
+    build_scrcpy_args_with_capabilities(&serial, &options, status.scrcpy.scrcpy_capabilities)
 }
 
 #[tauri::command]
@@ -394,9 +407,24 @@ fn start_scrcpy(
         .lock()
         .map_err(|_| "config lock poisoned".to_string())?
         .clone();
-    let scrcpy = resolve_tool("scrcpy", &config).ok_or_else(|| "scrcpy not found".to_string())?;
+    let status = get_tool_status_for_config(&config)?;
+    if status.scrcpy.health != ToolHealth::Ready {
+        return Err(status.scrcpy.message);
+    }
+    let scrcpy = status
+        .scrcpy
+        .path
+        .clone()
+        .ok_or_else(|| "scrcpy not found".to_string())?;
     let alias = config.device_aliases.get(&serial).cloned();
-    state.sessions.start(&app, &scrcpy, serial, alias, options)
+    state.sessions.start(
+        &app,
+        &scrcpy,
+        serial,
+        alias,
+        options,
+        status.scrcpy.scrcpy_capabilities,
+    )
 }
 
 #[tauri::command]

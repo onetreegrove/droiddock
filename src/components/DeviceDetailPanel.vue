@@ -26,7 +26,10 @@ const hasDeviceOptions = computed(() => Boolean(device.value && store.deviceOpti
 const displaySession = computed(() => (device.value ? store.displaySession(device.value.serial) : null));
 const isMirroring = computed(() => displaySession.value?.status === 'running');
 const ipAddress = computed(() => (device.value ? deviceIpAddress(device.value.serial) : null));
-const command = computed(() => (device.value ? buildScrcpyCommand(device.value.serial, editorOptions.value) : 'scrcpy'));
+// The preview stays local for instant feedback; starting a session still uses the backend builder as the source of truth.
+const command = computed(() =>
+  device.value ? buildScrcpyCommand(device.value.serial, editorOptions.value, store.scrcpyCapabilities) : 'scrcpy',
+);
 const launchState = computed(() => launchAvailability(device.value, isMirroring.value, store.isToolsReady));
 const connectionLabel = computed(() => {
   if (!device.value) return '-';
@@ -119,7 +122,7 @@ async function saveAlias() {
           <button class="btn btn-ghost compact-button" :disabled="!hasDeviceOptions" @click="resetToGlobal">重置</button>
         </div>
       </div>
-      <ParameterEditor v-model:options="editorOptions" variant="device" />
+      <ParameterEditor v-model:options="editorOptions" variant="device" :capabilities="store.scrcpyCapabilities" />
       <CommandPreview :command="command" />
     </section>
     <div v-if="aliasModalOpen" class="modal-overlay" @click.self="aliasModalOpen = false">
